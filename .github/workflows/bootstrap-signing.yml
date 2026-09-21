@@ -88,9 +88,12 @@ jobs:
           openssl req -x509 -newkey rsa:3072 -sha256 -nodes \
             -keyout "$workdir/key.pem" -out "$workdir/cert.pem" \
             -days 3650 -config "$workdir/openssl.cnf"
+          # macOS 的 security import 不认 OpenSSL 3 默认的 p12 加密组合（AES/PBKDF2），
+          # 会报 "MAC verification failed (wrong password?)"；必须显式指定经典算法。
           openssl pkcs12 -export -out "$workdir/identity.p12" \
             -inkey "$workdir/key.pem" -in "$workdir/cert.pem" \
-            -passout "pass:$P12_PASSWORD"
+            -passout "pass:$P12_PASSWORD" \
+            -macalg sha1 -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES
 
           base64 -w0 "$workdir/identity.p12" > "$workdir/identity.p12.b64"
 
