@@ -8,10 +8,14 @@ name: Bootstrap signing
 #    名称 SECRETS_PAT，值为该 PAT。
 #
 # 运行本 workflow 后它会：
+# - 校验 SECRETS_PAT（必须是 classic + repo scope，才能写 Actions secrets）；
 # - 在 runner 上生成自签证书（10 年期，codesign EKU）；
 # - 用 SECRETS_PAT 写入 CSC_LINK / CSC_KEY_PASSWORD 两个 secrets；
 # - 自动触发一次 build-release（产出首个签名 Release）；
 # - 删除 SECRETS_PAT（用后即焚；需要重新引导时再建一个）。
+#
+# 注意：GITHUB_TOKEN 没有 secrets 列表/写入权限，本 workflow 的 secrets 相关
+# 调用全部走 SECRETS_PAT。
 
 on:
   workflow_dispatch: {}
@@ -28,23 +32,25 @@ jobs:
   bootstrap:
     runs-on: ubuntu-latest
     steps:
-      - name: Guard against certificate rotation
+      - name: Validate SECRETS_PAT and rotation guard
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SECRETS_PAT }}
         run: |
           set -euo pipefail
-          if gh secret list --repo "$GITHUB_REPOSITORY" | grep -q "^CSC_LINK"; then
-            echo "::error::CSC_LINK already exists. Rotating the certificate would break silent updates for installed apps; delete CSC_* manually first if really needed."
+          if ! gh api user --jq .login > "$RUNNER_TEMP/login.txt" 2>&1; then
+            echo "::error::SECRETS_PAT 未设置或无效。请确认：classic PAT（不是 fine-grained）、勾选 repo scope、未过期，并且 secret 名称是 SECRETS_PAT。"
+            cat "$RUNNER_TEMP/login.txt"
             exit 1
           fi
+          echo "authenticated as $(cat "$RUNNER_TEMP/login.txt")"
 
-      - name: Require SECRETS_PAT
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if ! gh secret list --repo "$GITHUB_REPOSITORY" | grep -q "^SECRETS_PAT"; then
-            echo "::error::SECRETS_PAT is missing. Create a classic PAT (repo scope), store it as secret SECRETS_PAT per the workflow header, then rerun."
+          if ! gh secret list --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/secrets.txt" 2> "$RUNNER_TEMP/secrets.err"; then
+            echo "::error::无法列出仓库 secrets（需要 classic PAT + repo scope）。fine-grained PAT 只有读权限，请改用 classic。"
+            cat "$RUNNER_TEMP/secrets.err"
+            exit 1
+          fi
+          if grep -q "^CSC_LINK" "$RUNNER_TEMP/secrets.txt"; then
+            echo "::error::CSC_LINK already exists. Rotating the certificate would break silent updates for installed apps; delete CSC_* manually first if really needed."
             exit 1
           fi
 
@@ -57,6 +63,8 @@ jobs:
 
       - name: Generate self-signed codesigning certificate
         id: cert
+        env:
+          P12_PASSWORD: ${{ steps.password.outputs.value }}
         run: |
           set -euo pipefail
           workdir=$(mktemp -d)
