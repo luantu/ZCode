@@ -80,8 +80,8 @@ jobs:
           keychain=build.keychain
           security create-keychain -p "$keychain_password" "$keychain"
           # 默认 5 分钟无操作自动上锁；长打包中途上锁会让 codesign 弹密码框挂死无头 runner。
-          # set-keychain-settings 不带参数 = 永不自动上锁。
-          security set-keychain-settings "$keychain"
+          # 注意：set-keychain-settings 不带参数 = 恢复默认（300 秒自动上锁），必须显式给长超时。
+          security set-keychain-settings -t 86400 "$keychain"
           security list-keychains -s "$keychain" $(security list-keychains | tr -d '"' | tr '\n' ' ')
           security unlock-keychain -p "$keychain_password" "$keychain"
 
