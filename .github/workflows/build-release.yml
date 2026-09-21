@@ -58,8 +58,6 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "$CSC_LINK_SECRET" ] && [ -n "$CSC_KEY_PASSWORD_SECRET" ]; then
-            echo "CSC_LINK=$CSC_LINK_SECRET" >> "$GITHUB_ENV"
-            echo "CSC_KEY_PASSWORD=$CSC_KEY_PASSWORD_SECRET" >> "$GITHUB_ENV"
             echo "ZCODE_ENABLE_MAC_SIGN=1" >> "$GITHUB_ENV"
             echo "CSC_NAME=ZCode Fork Signing" >> "$GITHUB_ENV"
             echo "PUBLISH_FLAG=always" >> "$GITHUB_ENV"
@@ -69,6 +67,29 @@ jobs:
             echo "PUBLISH_FLAG=" >> "$GITHUB_ENV"
             echo "signing: disabled (CSC secrets not configured); build artifacts only"
           fi
+
+      - name: Import signing certificate into trusted keychain
+        if: steps.guard.outputs.skip != 'true' && env.PUBLISH_FLAG == 'always'
+        env:
+          CSC_LINK_SECRET: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD_SECRET: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain_password=$(openssl rand -hex 16)
+          keychain=build.keychain
+          security create-keychain -p "$keychain_password" "$keychain"
+          security list-keychains -s "$keychain" $(security list-keychains | tr -d '"' | tr '\n' ' ')
+          security unlock-keychain -p "$keychain_password" "$keychain"
+
+          echo "$CSC_LINK_SECRET" | base64 -d > cert.p12
+          openssl pkcs12 -in cert.p12 -clcerts -nokeys -passin "pass:$CSC_KEY_PASSWORD_SECRET" -out cert.pem
+
+          security import cert.p12 -k "$keychain" -P "$CSC_KEY_PASSWORD_SECRET" -T /usr/bin/codesign
+          # 自签证书必须在钥匙串里显式信任，electron-builder 的 find-identity -v 才认；
+          # 否则它会静默回退 ad-hoc 签名，破坏 Squirrel 更新的签名一致性。
+          sudo security add-trusted-cert -d -r trustRoot -k "$keychain" cert.pem
+          security set-key-partition-list -S apple-tool:,apple-sig:,codesign: -k "$keychain_password" "$keychain" > /dev/null
+          security find-identity -v -p codesigning "$keychain"
 
       - uses: pnpm/action-setup@v4
         if: steps.guard.outputs.skip != 'true'
