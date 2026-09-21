@@ -93,6 +93,8 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          # CI 是干净环境，必须显式声明生产后端；否则按 test 处理，产物会变成 Preview/_TEST 身份。
+          ZCODE_ENV: production
           ZCODE_PUBLISH_GITHUB: "1"
         run: pnpm bundle:desktop -- --publish always
 

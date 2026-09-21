@@ -762,6 +762,9 @@ export default {
           provider: "github",
           owner: "luantu",
           repo: "ZCode",
+          // electron-builder 默认发草稿；electron-updater 的 GitHub provider 只读已发布 Release，
+          // 必须直接发正式 Release，客户端才能检测到更新。
+          releaseType: "release",
         }
       : {
           provider: "generic",
