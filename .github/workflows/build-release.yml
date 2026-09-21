@@ -76,8 +76,12 @@ jobs:
         run: |
           set -euo pipefail
           keychain_password=$(openssl rand -hex 16)
+          echo "BUILD_KEYCHAIN_PASSWORD=$keychain_password" >> "$GITHUB_ENV"
           keychain=build.keychain
           security create-keychain -p "$keychain_password" "$keychain"
+          # 默认 5 分钟无操作自动上锁；长打包中途上锁会让 codesign 弹密码框挂死无头 runner。
+          # set-keychain-settings 不带参数 = 永不自动上锁。
+          security set-keychain-settings "$keychain"
           security list-keychains -s "$keychain" $(security list-keychains | tr -d '"' | tr '\n' ' ')
           security unlock-keychain -p "$keychain_password" "$keychain"
 
@@ -117,6 +121,10 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           node -e "const fs=require('node:fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='$version';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
           echo "fork version: $version (upstream base $upstream_version)"
+
+      - name: Unlock build keychain
+        if: steps.guard.outputs.skip != 'true' && env.PUBLISH_FLAG == 'always'
+        run: security unlock-keychain -p "$BUILD_KEYCHAIN_PASSWORD" build.keychain
 
       - name: Bundle desktop (mac arm64)
         if: steps.guard.outputs.skip != 'true'
