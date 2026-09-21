@@ -17,7 +17,10 @@ import {
 } from "@zcode/shared";
 import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import pkg, { CancellationToken } from "electron-updater";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import semver from "semver";
+import { parse as parseYaml } from "yaml";
 import { logger } from "./logger.js";
 import { getElectronReleasePlatform, ManifestUpdateProvider } from "./manifestUpdateProvider.js";
 const { autoUpdater } = pkg;
@@ -749,6 +752,26 @@ async function syncAutoUpdateCheckChannelFromSettings(
   // 如果 begin 阶段仍用默认 stable 作为 expected channel，冷启动 preview 结果会被误判为 stale。
   availableUpdateChannel = nextChannel;
   activeAutoUpdateCheckChannel = nextChannel;
+}
+
+/**
+ * 打包产物是否自带 fork 的 GitHub 更新源（electron-builder 以 ZCODE_PUBLISH_GITHUB=1 打包时写入）。
+ * 仅读取打包资源里的 app-update.yml，不读进程环境，保证 Finder/Dock 启动的正式包同样生效。
+ */
+function hasPackagedGithubPublishConfig(): boolean {
+  if (!app.isPackaged) return false;
+  try {
+    const raw = readFileSync(join(process.resourcesPath, "app-update.yml"), "utf8");
+    const parsed = parseYaml(raw) as { provider?: unknown } | null;
+    return parsed?.provider === "github";
+  } catch (error) {
+    logger.warn(
+      `[auto-update] read packaged app-update.yml failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return false;
+  }
 }
 
 function applyManifestUpdateProvider(options: InitAutoUpdaterOptions): void {
@@ -1504,7 +1527,14 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
   // 这里仅在 Windows 关闭“退出即自动安装”，要求用户显式点更新；其他平台保持原有行为，避免改动既有升级链路。
   autoUpdater.autoInstallOnAppQuit = process.platform !== "win32";
   autoUpdater.logger = logger;
-  applyManifestUpdateProvider(options);
+  if (hasPackagedGithubPublishConfig()) {
+    // Fork 构建（CI 以 ZCODE_PUBLISH_GITHUB=1 打包）自带 provider: github 的 app-update.yml。
+    // 此时不再叠加官方 manifest provider，electron-updater 直接按 app-update.yml 从
+    // fork 自有 Releases 检查更新；更新源改道后禁止回落官方 feed，定制构建才不会被官方版本覆盖。
+    logger.info("[auto-update] using packaged app-update.yml feed (fork github provider)");
+  } else {
+    applyManifestUpdateProvider(options);
+  }
 
   const triggerCheckForUpdates = (reason: string) => {
     if (checkForUpdatesInFlight) {

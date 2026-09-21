@@ -253,6 +253,7 @@ function printHelp() {
   --arch, -a <x64|arm64>       目标 CPU 架构，默认 arm64
   --skip-prepare               跳过 prepare:runtime-assets
   --skip-build                 跳过 pnpm build
+  --publish [flag]             透传给 electron-builder 的发布参数（CI 用 --publish always）
   --dry-run                    只打印最终命令，不执行打包
   -h, --help                   查看帮助
 
@@ -284,6 +285,7 @@ function parseArgs(argv) {
     arch: process.env.ZCODE_TARGET_ARCH ?? null,
     skipPrepare: process.env.ZCODE_SKIP_PREPARE === "1",
     skipBuild: process.env.ZCODE_SKIP_BUILD === "1",
+    publish: process.env.ZCODE_PUBLISH_FLAG ?? null,
     dryRun: false,
     positionals: [],
   };
@@ -312,6 +314,17 @@ function parseArgs(argv) {
 
     if (arg === "--skip-build") {
       options.skipBuild = true;
+      continue;
+    }
+
+    if (arg === "--publish") {
+      options.publish = argv[index + 1] ?? "always";
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--publish=")) {
+      options.publish = arg.slice("--publish=".length);
       continue;
     }
 
@@ -359,6 +372,7 @@ function parseArgs(argv) {
     arch: resolvedArch,
     skipPrepare: options.skipPrepare,
     skipBuild: options.skipBuild,
+    publish: options.publish,
     dryRun: options.dryRun,
   };
 }
@@ -699,7 +713,7 @@ function verifyPackagedRuntimeDependencies(os, arch) {
 }
 
 async function main() {
-  const { os, arch, skipPrepare, skipBuild, dryRun } = parseArgs(process.argv.slice(2));
+  const { os, arch, skipPrepare, skipBuild, publish, dryRun } = parseArgs(process.argv.slice(2));
   const buildArgs = [
     "exec",
     "electron-builder",
@@ -707,10 +721,13 @@ async function main() {
     "electron-builder.config.js",
     osBuilderFlagMap[os],
     archBuilderFlagMap[arch],
+    ...(publish ? ["--publish", publish] : []),
   ];
 
   console.log(`[bundle] target=${os}/${arch}`);
-  console.log(`[bundle] skipPrepare=${skipPrepare} skipBuild=${skipBuild}`);
+  console.log(
+    `[bundle] skipPrepare=${skipPrepare} skipBuild=${skipBuild} publish=${publish ?? "none"}`,
+  );
 
   const buildEnv = {
     ZCODE_TARGET_OS: os,

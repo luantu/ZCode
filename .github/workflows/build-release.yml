@@ -1,0 +1,86 @@
+name: Build desktop release
+
+# 编译 fork 定制桌面版并发布到 GitHub Releases（tag vX.Y.Z 由 next-fork-version 严格递增）。
+# 触发面：手动 push 到 main、sync-upstream 完成后的 workflow_run、手动 dispatch。
+# 已发布过 HEAD 所在提交（tag 指向同一 commit）时跳过，保证幂等。
+# 签名：CSC_LINK/CSC_KEY_PASSWORD secrets 存在时用自签证书签名（Squirrel 静默更新必需），
+# 未配置时回退未签名构建（仅验证流水线用）。
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Sync upstream
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if HEAD already released
+        id: guard
+        run: |
+          set -euo pipefail
+          last_tag=$(git tag --list 'v*' | sort -V | tail -1 || true)
+          if [ -n "$last_tag" ] && [ "$(git rev-parse HEAD)" = "$(git rev-parse "${last_tag}^{commit}")" ]; then
+            echo "HEAD 已经发布过（$last_tag），跳过构建"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.guard.outputs.skip != 'true'
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.skip != 'true'
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.guard.outputs.skip != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Compute fork version
+        if: steps.guard.outputs.skip != 'true'
+        id: version
+        run: |
+          set -euo pipefail
+          version=$(node scripts/ci/next-fork-version.mjs)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          node -e "const fs=require('node:fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='$version';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+          echo "fork 版本: $version（基于上游提交 $(git rev-parse --short HEAD)）"
+
+      - name: Bundle desktop (mac arm64)
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZCODE_PUBLISH_GITHUB: "1"
+          ZCODE_ENABLE_MAC_SIGN: "1"
+          CSC_NAME: "ZCode Fork Signing"
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: pnpm bundle:desktop -- --publish always
+
+      - name: List artifacts
+        if: steps.guard.outputs.skip != 'true'
+        run: ls -lh packages/desktop/dist/ || true
