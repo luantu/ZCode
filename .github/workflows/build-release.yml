@@ -132,7 +132,7 @@ jobs:
           last_tag=$(git tag --list 'v*' | grep -v "^v$VERSION$" | sort -V | tail -1 || true)
           range="${last_tag:+$last_tag..}HEAD"
           {
-            echo "fork 版本 v$VERSION，上游基线 $UPSTREAM_VERSION（zai-org/ZCode）。"
+            echo "fork v${VERSION}，上游基线 ${UPSTREAM_VERSION}（zai-org/ZCode）。"
             echo ""
             echo "自上个 fork 发布以来的提交："
             git log --no-merges --format="- %h %s" $range | head -40
