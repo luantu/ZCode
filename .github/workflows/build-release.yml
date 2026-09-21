@@ -77,7 +77,9 @@ jobs:
           set -euo pipefail
           keychain_password=$(openssl rand -hex 16)
           echo "BUILD_KEYCHAIN_PASSWORD=$keychain_password" >> "$GITHUB_ENV"
-          keychain=build.keychain
+          # 必须用绝对路径：electron-builder 在 packages/desktop 子目录下执行 codesign，
+          # 钥匙串搜索列表里的相对路径条目会解析失败，codesign 直接挂起。
+          keychain="$HOME/Library/Keychains/build.keychain"
           security create-keychain -p "$keychain_password" "$keychain"
           # 默认 5 分钟无操作自动上锁；长打包中途上锁会让 codesign 弹密码框挂死无头 runner。
           # 注意：set-keychain-settings 不带参数 = 恢复默认（300 秒自动上锁），必须显式给长超时。
@@ -124,7 +126,14 @@ jobs:
 
       - name: Unlock build keychain
         if: steps.guard.outputs.skip != 'true' && env.PUBLISH_FLAG == 'always'
-        run: security unlock-keychain -p "$BUILD_KEYCHAIN_PASSWORD" build.keychain
+        run: |
+          set -euo pipefail
+          keychain="$HOME/Library/Keychains/build.keychain"
+          security unlock-keychain -p "$BUILD_KEYCHAIN_PASSWORD" "$keychain"
+          echo "=== keychain search list ==="
+          security list-keychains
+          echo "=== codesign identities（预期 1 valid）==="
+          security find-identity -v -p codesigning "$keychain"
 
       - name: Bundle desktop (mac arm64)
         if: steps.guard.outputs.skip != 'true'
