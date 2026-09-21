@@ -1,8 +1,8 @@
 name: Sync upstream
 
-# 定时把官方 zai-org/ZCode 的 main 合并进 fork；无冲突直接推进 main 并触发构建
-# （build-release 监听本 workflow 的 workflow_run），有冲突则开 PR 人工处理，
-# 避免 fork 定制代码（displayName、更新源补丁等）被上游直接冲掉。
+# 定时把官方 zai-org/ZCode 的 main 合并进 fork。合并后先在 runner 上跑
+# typecheck + lint 质量门，通过才推进 main（并触发 build-release 的 workflow_run）；
+# 合并冲突或检查不通过都转成 PR 人工处理，避免 fork 定制代码被上游直接冲掉。
 
 on:
   schedule:
@@ -20,8 +20,6 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    outputs:
-      merged: ${{ steps.merge.outputs.merged }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,8 +44,7 @@ jobs:
           fi
 
           if git merge --no-edit upstream/main; then
-            git push origin main
-            echo "merged=true" >> "$GITHUB_OUTPUT"
+            echo "merged=pending" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -65,3 +62,41 @@ jobs:
             --title "上游同步冲突，需要人工解决" \
             --body "上游 zai-org/ZCode main 与 fork 存在冲突（含定制补丁：displayName、fork 更新源、CI workflow）。请解决冲突后合并；合并后手动触发 build-release。"
           echo "merged=false" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v4
+        if: steps.merge.outputs.merged == 'pending'
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v4
+        if: steps.merge.outputs.merged == 'pending'
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+
+      - name: Verify merged tree (typecheck + lint)
+        if: steps.merge.outputs.merged == 'pending'
+        run: |
+          pnpm install --ignore-scripts --frozen-lockfile
+          pnpm typecheck
+          pnpm lint
+
+      - name: Push merged main
+        if: steps.merge.outputs.merged == 'pending'
+        run: |
+          git push origin main
+          echo "merged=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open PR when checks fail
+        if: failure() && steps.merge.outputs.merged == 'pending'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="sync-checks-failed/$(date +%Y%m%d%H%M%S)"
+          git checkout -b "$branch"
+          git push origin "$branch"
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "上游同步已合并但 typecheck/lint 未通过" \
+            --body "合并结果在本 workflow 的 typecheck/lint 门上失败，已保留到本分支。请人工修复后合并；合并后手动触发 build-release。"

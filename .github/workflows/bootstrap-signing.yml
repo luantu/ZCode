@@ -1,0 +1,108 @@
+name: Bootstrap signing
+
+# 一次性引导：在 GitHub 侧生成自签代码签名证书并写入 CSC_* secrets，全程无需本地终端。
+#
+# 使用前提（浏览器操作，两步）：
+# 1. github.com/settings/tokens/new 创建 classic PAT（勾选 repo scope）；
+# 2. 仓库 Settings → Secrets and variables → Actions 新增 secret：
+#    名称 SECRETS_PAT，值为该 PAT。
+#
+# 运行本 workflow 后它会：
+# - 在 runner 上生成自签证书（10 年期，codesign EKU）；
+# - 用 SECRETS_PAT 写入 CSC_LINK / CSC_KEY_PASSWORD 两个 secrets；
+# - 自动触发一次 build-release（产出首个签名 Release）；
+# - 删除 SECRETS_PAT（用后即焚；需要重新引导时再建一个）。
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: bootstrap-signing
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard against certificate rotation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh secret list --repo "$GITHUB_REPOSITORY" | grep -q "^CSC_LINK"; then
+            echo "::error::CSC_LINK already exists. Rotating the certificate would break silent updates for installed apps; delete CSC_* manually first if really needed."
+            exit 1
+          fi
+
+      - name: Require SECRETS_PAT
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh secret list --repo "$GITHUB_REPOSITORY" | grep -q "^SECRETS_PAT"; then
+            echo "::error::SECRETS_PAT is missing. Create a classic PAT (repo scope), store it as secret SECRETS_PAT per the workflow header, then rerun."
+            exit 1
+          fi
+
+      - name: Generate p12 password
+        id: password
+        run: |
+          set -euo pipefail
+          password=$(openssl rand -hex 16)
+          echo "value=$password" >> "$GITHUB_OUTPUT"
+
+      - name: Generate self-signed codesigning certificate
+        id: cert
+        run: |
+          set -euo pipefail
+          workdir=$(mktemp -d)
+          echo "workdir=$workdir" >> "$GITHUB_OUTPUT"
+
+          cat > "$workdir/openssl.cnf" <<'EOF'
+          [req]
+          distinguished_name = dn
+          x509_extensions = v3_req
+          prompt = no
+          default_md = sha256
+          [dn]
+          CN = ZCode Fork Signing
+          O = ZCode Fork
+          [v3_req]
+          basicConstraints = critical,CA:FALSE
+          keyUsage = critical,digitalSignature
+          extendedKeyUsage = critical,codeSigning
+          EOF
+
+          openssl req -x509 -newkey rsa:3072 -sha256 -nodes \
+            -keyout "$workdir/key.pem" -out "$workdir/cert.pem" \
+            -days 3650 -config "$workdir/openssl.cnf"
+          openssl pkcs12 -export -out "$workdir/identity.p12" \
+            -inkey "$workdir/key.pem" -in "$workdir/cert.pem" \
+            -passout "pass:$P12_PASSWORD"
+
+          base64 -w0 "$workdir/identity.p12" > "$workdir/identity.p12.b64"
+
+      - name: Write CSC secrets
+        env:
+          GH_TOKEN: ${{ secrets.SECRETS_PAT }}
+          P12_PASSWORD: ${{ steps.password.outputs.value }}
+          WORKDIR: ${{ steps.cert.outputs.workdir }}
+        run: |
+          set -euo pipefail
+          gh secret set CSC_LINK --repo "$GITHUB_REPOSITORY" < "$WORKDIR/identity.p12.b64"
+          gh secret set CSC_KEY_PASSWORD --repo "$GITHUB_REPOSITORY" --body "$P12_PASSWORD"
+          echo "CSC_LINK / CSC_KEY_PASSWORD written"
+
+      - name: Trigger signed build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build-release.yml --repo "$GITHUB_REPOSITORY" --ref main
+
+      - name: Delete SECRETS_PAT (use once)
+        env:
+          GH_TOKEN: ${{ secrets.SECRETS_PAT }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/secrets/SECRETS_PAT"

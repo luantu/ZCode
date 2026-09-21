@@ -1,15 +1,20 @@
 name: Build desktop release
 
 # 编译 fork 定制桌面版并发布到 GitHub Releases（tag vX.Y.Z 由 next-fork-version 严格递增）。
-# 触发面：手动 push 到 main、sync-upstream 完成后的 workflow_run、手动 dispatch。
-# 已发布过 HEAD 所在提交（tag 指向同一 commit）时跳过，保证幂等。
-# 签名：CSC_LINK/CSC_KEY_PASSWORD secrets 存在时用自签证书签名（Squirrel 静默更新必需），
-# 未配置时回退未签名构建（仅验证流水线用）。
+# 触发面：push 到 main、sync-upstream 完成后的 workflow_run、手动 dispatch、
+# bootstrap-signing 完成后的自动 dispatch。
+# - CSC_* secrets 已配置（bootstrap-signing 写入）时：签名构建并发布正式 Release，
+#   客户端可静默自动更新；发布后补写上游变更说明、校验更新清单、清理旧 Release。
+# - 未配置签名时：仅出未签名构建产物（workflow artifact），不发布 Release，
+#   保证 Releases 里永远是可静默更新链路的签名包。
+# HEAD 已有发布 tag 时跳过，保证幂等。
 
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "**/*.md"
   workflow_dispatch:
   workflow_run:
     workflows:
@@ -45,6 +50,26 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Prepare signing env
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          CSC_LINK_SECRET: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD_SECRET: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "$CSC_LINK_SECRET" ] && [ -n "$CSC_KEY_PASSWORD_SECRET" ]; then
+            echo "CSC_LINK=$CSC_LINK_SECRET" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$CSC_KEY_PASSWORD_SECRET" >> "$GITHUB_ENV"
+            echo "ZCODE_ENABLE_MAC_SIGN=1" >> "$GITHUB_ENV"
+            echo "CSC_NAME=ZCode Fork Signing" >> "$GITHUB_ENV"
+            echo "PUBLISH_FLAG=always" >> "$GITHUB_ENV"
+            echo "signing: enabled (self-signed cert)"
+          else
+            echo "ZCODE_ENABLE_MAC_SIGN=0" >> "$GITHUB_ENV"
+            echo "PUBLISH_FLAG=" >> "$GITHUB_ENV"
+            echo "signing: disabled (CSC secrets not configured); build artifacts only"
+          fi
+
       - uses: pnpm/action-setup@v4
         if: steps.guard.outputs.skip != 'true'
         with:
@@ -65,29 +90,12 @@ jobs:
         id: version
         run: |
           set -euo pipefail
+          upstream_version=$(node -p "require('./package.json').version")
+          echo "upstream_version=$upstream_version" >> "$GITHUB_OUTPUT"
           version=$(node scripts/ci/next-fork-version.mjs)
           echo "version=$version" >> "$GITHUB_OUTPUT"
           node -e "const fs=require('node:fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='$version';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
-          echo "fork version: $version"
-          echo "upstream commit: $(git rev-parse --short HEAD)"
-
-      - name: Prepare signing env
-        if: steps.guard.outputs.skip != 'true'
-        env:
-          CSC_LINK_SECRET: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD_SECRET: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ -n "$CSC_LINK_SECRET" ] && [ -n "$CSC_KEY_PASSWORD_SECRET" ]; then
-            echo "CSC_LINK=$CSC_LINK_SECRET" >> "$GITHUB_ENV"
-            echo "CSC_KEY_PASSWORD=$CSC_KEY_PASSWORD_SECRET" >> "$GITHUB_ENV"
-            echo "ZCODE_ENABLE_MAC_SIGN=1" >> "$GITHUB_ENV"
-            echo "CSC_NAME=ZCode Fork Signing" >> "$GITHUB_ENV"
-            echo "signing: enabled (self-signed cert)"
-          else
-            echo "ZCODE_ENABLE_MAC_SIGN=0" >> "$GITHUB_ENV"
-            echo "signing: disabled (CSC secrets not configured)"
-          fi
+          echo "fork version: $version (upstream base $upstream_version)"
 
       - name: Bundle desktop (mac arm64)
         if: steps.guard.outputs.skip != 'true'
@@ -96,8 +104,63 @@ jobs:
           # CI 是干净环境，必须显式声明生产后端；否则按 test 处理，产物会变成 Preview/_TEST 身份。
           ZCODE_ENV: production
           ZCODE_PUBLISH_GITHUB: "1"
-        run: pnpm bundle:desktop -- --publish always
+        run: |
+          if [ -n "$PUBLISH_FLAG" ]; then
+            pnpm bundle:desktop -- --publish "$PUBLISH_FLAG"
+          else
+            pnpm bundle:desktop
+          fi
 
-      - name: List artifacts
-        if: steps.guard.outputs.skip != 'true'
-        run: ls -lh packages/desktop/dist/ || true
+      - name: Upload unsigned build artifacts
+        if: steps.guard.outputs.skip != 'true' && env.PUBLISH_FLAG == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZCode-desktop-mac-arm64-unsigned
+          path: |
+            packages/desktop/dist/ZCode-*.zip
+            packages/desktop/dist/ZCode-*.dmg
+          if-no-files-found: warn
+
+      - name: Write release notes
+        if: steps.guard.outputs.skip != 'true' && env.PUBLISH_FLAG == 'always'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          UPSTREAM_VERSION: ${{ steps.version.outputs.upstream_version }}
+        run: |
+          set -euo pipefail
+          last_tag=$(git tag --list 'v*' | grep -v "^v$VERSION$" | sort -V | tail -1 || true)
+          range="${last_tag:+$last_tag..}HEAD"
+          {
+            echo "fork 版本 v$VERSION，上游基线 $UPSTREAM_VERSION（zai-org/ZCode）。"
+            echo ""
+            echo "自上个 fork 发布以来的提交："
+            git log --no-merges --format="- %h %s" $range | head -40
+          } > release-notes.md
+          gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --notes-file release-notes.md
+
+      - name: Verify update manifest
+        if: steps.guard.outputs.skip != 'true' && env.PUBLISH_FLAG == 'always'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          assets=$(gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | join(",")')
+          echo "release assets: $assets"
+          echo "$assets" | grep -q "latest-mac.yml"
+          echo "$assets" | grep -q "ZCode-$VERSION-mac-arm64.zip"
+
+      - name: Prune old releases
+        if: steps.guard.outputs.skip != 'true' && env.PUBLISH_FLAG == 'always'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          count=0
+          for tag in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 --json tagName --jq '.[].tagName'); do
+            count=$((count + 1))
+            if [ "$count" -gt 3 ]; then
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+            fi
+          done
