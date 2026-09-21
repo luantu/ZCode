@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           last_tag=$(git tag --list 'v*' | sort -V | tail -1 || true)
           if [ -n "$last_tag" ] && [ "$(git rev-parse HEAD)" = "$(git rev-parse "${last_tag}^{commit}")" ]; then
-            echo "HEAD 已经发布过（$last_tag），跳过构建"
+            echo "HEAD already released as $last_tag, skipping"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -68,7 +68,8 @@ jobs:
           version=$(node scripts/ci/next-fork-version.mjs)
           echo "version=$version" >> "$GITHUB_OUTPUT"
           node -e "const fs=require('node:fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='$version';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
-          echo "fork 版本: $version（基于上游提交 $(git rev-parse --short HEAD)）"
+          echo "fork version: $version"
+          echo "upstream commit: $(git rev-parse --short HEAD)"
 
       - name: Bundle desktop (mac arm64)
         if: steps.guard.outputs.skip != 'true'
