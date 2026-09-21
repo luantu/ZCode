@@ -75,6 +75,7 @@ export const completeModelPropertiesDataSchema = z
     supportsJsonSchemaOutput: z.boolean(),
     supportsNativeWebSearch: z.boolean(),
     supportsMidConversationSystem: z.boolean(),
+    displayName: z.string().min(1).optional(),
   })
   .strict();
 export const modelPropertiesDataSchema = z

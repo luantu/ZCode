@@ -54,7 +54,8 @@ export function buildRegistryModelSelectGroups(
         items: provider.models.map(({ modelId, config }) => ({
           key: `registry-provider:${provider.providerId}:${modelId}`,
           value: encodeCustomModelValue(provider.providerId, modelId),
-          name: modelId,
+          // DisplayName 缺失或空白时回退裸 modelId，保证未知/个人模型始终可读。
+          name: config.properties?.displayName?.trim() || modelId,
           ...(shouldShowModelVisionBadge(
             modelId,
             config.properties?.inputFormat?.supportsImage,

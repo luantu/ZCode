@@ -183,6 +183,7 @@ export class ModelPropertiesConfig extends ConfigOverlay<ModelPropertiesConfig> 
   readonly supportsJsonSchemaOutput?: ModelPropertiesConfigInput["supportsJsonSchemaOutput"];
   readonly supportsNativeWebSearch?: ModelPropertiesConfigInput["supportsNativeWebSearch"];
   readonly supportsMidConversationSystem?: ModelPropertiesConfigInput["supportsMidConversationSystem"];
+  readonly displayName?: ModelPropertiesConfigInput["displayName"];
 
   constructor(input: ModelPropertiesConfigInput = {}) {
     super();
@@ -222,6 +223,7 @@ export class ModelPropertiesConfig extends ConfigOverlay<ModelPropertiesConfig> 
         this.supportsMidConversationSystem,
         next.supportsMidConversationSystem,
       ),
+      displayName: this.overlayValue(this.displayName, next.displayName),
     });
   }
 
@@ -239,6 +241,7 @@ export class ModelPropertiesConfig extends ConfigOverlay<ModelPropertiesConfig> 
       supportsJsonSchemaOutput: this.supportsJsonSchemaOutput,
       supportsNativeWebSearch: this.supportsNativeWebSearch,
       supportsMidConversationSystem: this.supportsMidConversationSystem,
+      displayName: this.displayName,
     });
   }
 }
