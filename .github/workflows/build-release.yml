@@ -84,7 +84,9 @@ jobs:
           # 默认 5 分钟无操作自动上锁；长打包中途上锁会让 codesign 弹密码框挂死无头 runner。
           # 注意：set-keychain-settings 不带参数 = 恢复默认（300 秒自动上锁），必须显式给长超时。
           security set-keychain-settings -t 86400 "$keychain"
-          security list-keychains -s "$keychain" $(security list-keychains | tr -d '"' | tr '\n' ' ')
+          # 搜索列表只保留 build.keychain：若包含锁定的 login/System 钥匙串，
+          # codesign 会等待无头机器上无人应答的解锁弹窗而永久挂起。
+          security list-keychains -s "$keychain"
           security unlock-keychain -p "$keychain_password" "$keychain"
 
           echo "$CSC_LINK_SECRET" | base64 -d > cert.p12
@@ -142,6 +144,8 @@ jobs:
           # CI 是干净环境，必须显式声明生产后端；否则按 test 处理，产物会变成 Preview/_TEST 身份。
           ZCODE_ENV: production
           ZCODE_PUBLISH_GITHUB: "1"
+          # 签名阶段挂起时，完成态日志里能看到 electron-builder 实际执行的 codesign 命令。
+          DEBUG: electron-builder
         run: |
           if [ -n "$PUBLISH_FLAG" ]; then
             pnpm bundle:desktop -- --publish "$PUBLISH_FLAG"
