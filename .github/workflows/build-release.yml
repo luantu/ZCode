@@ -156,6 +156,20 @@ jobs:
             pnpm bundle:desktop
           fi
 
+      - name: Verify signed app identity
+        if: steps.guard.outputs.skip != 'true' && env.PUBLISH_FLAG == 'always'
+        run: |
+          set -euo pipefail
+          app="packages/desktop/dist/mac-arm64/ZCode.app"
+          test -d "$app"
+          identity=$(codesign -dv --verbose=2 "$app" 2>&1 | awk -F= '/^Authority=/{print $2; exit}')
+          echo "packaged authority: ${identity:-<none>}"
+          if [ "$identity" != "ZCode Fork Signing" ]; then
+            echo "::error::packaged app is not signed by ZCode Fork Signing (likely ad-hoc)"
+            exit 1
+          fi
+          codesign --verify --deep "$app"
+
       - name: Upload unsigned build artifacts
         if: steps.guard.outputs.skip != 'true' && env.PUBLISH_FLAG == ''
         uses: actions/upload-artifact@v4

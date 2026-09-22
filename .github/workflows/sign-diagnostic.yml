@@ -33,7 +33,7 @@ jobs:
           security unlock-keychain -p "$keychain_password" "$keychain"
           echo "$CSC_LINK_SECRET" | base64 -d > cert.p12
           openssl pkcs12 -in cert.p12 -clcerts -nokeys -passin "pass:$CSC_KEY_PASSWORD_SECRET" -out cert.pem
-          security import cert.p12 -k "$keychain" -P "$CSC_KEY_PASSWORD_SECRET" -T /usr/bin/codesign
+          security import cert.p12 -k "$keychain" -P "$CSC_KEY_PASSWORD_SECRET" -A
           sudo security add-trusted-cert -d -r trustRoot -k "$keychain" cert.pem
           echo "=== set-key-partition-list 完整输出 ==="
           security set-key-partition-list -S apple-tool:,apple-sig:,codesign: -k "$keychain_password" "$keychain"
@@ -66,6 +66,8 @@ jobs:
           echo "mini app ready"
 
       - name: Sign with --timestamp (default)
+        id: timestamp
+        continue-on-error: true
         run: |
           set -uo pipefail
           keychain="$HOME/Library/Keychains/diag.keychain"
@@ -87,6 +89,9 @@ jobs:
           codesign -dv Mini-ts.app 2>&1 | grep -E "Authority|Signature" || true
 
       - name: Sign with --timestamp=none
+        if: always()
+        id: no_timestamp
+        continue-on-error: true
         run: |
           set -uo pipefail
           keychain="$HOME/Library/Keychains/diag.keychain"
