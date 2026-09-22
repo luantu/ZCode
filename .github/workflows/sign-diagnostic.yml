@@ -1,0 +1,105 @@
+name: Sign diagnostic
+
+# 定位 CI 上 codesign 挂起的根因：用最小合法 App 分别测试
+# --timestamp（默认，需连时间戳服务）与 --timestamp=none 两种签名，
+# 带 240 秒超时观察；结果直接打印在日志里。
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sign-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diag:
+    runs-on: macos-14
+    steps:
+      - name: Import signing certificate into trusted keychain
+        env:
+          CSC_LINK_SECRET: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD_SECRET: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain_password=$(openssl rand -hex 16)
+          echo "BUILD_KEYCHAIN_PASSWORD=$keychain_password" >> "$GITHUB_ENV"
+          keychain="$HOME/Library/Keychains/diag.keychain"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -t 86400 "$keychain"
+          security list-keychains -s "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          echo "$CSC_LINK_SECRET" | base64 -d > cert.p12
+          openssl pkcs12 -in cert.p12 -clcerts -nokeys -passin "pass:$CSC_KEY_PASSWORD_SECRET" -out cert.pem
+          security import cert.p12 -k "$keychain" -P "$CSC_KEY_PASSWORD_SECRET" -T /usr/bin/codesign
+          sudo security add-trusted-cert -d -r trustRoot -k "$keychain" cert.pem
+          security set-key-partition-list -S apple-tool:,apple-sig:,codesign: -k "$keychain_password" "$keychain" > /dev/null
+          security find-identity -v -p codesigning "$keychain"
+
+      - name: Build mini app
+        run: |
+          set -euo pipefail
+          mkdir -p Mini.app/Contents/MacOS
+          cat > mini.c <<'EOF'
+          int main(void) { return 0; }
+          EOF
+          cc -o Mini.app/Contents/MacOS/mini mini.c
+          cat > Mini.app/Contents/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>mini</string>
+            <key>CFBundleIdentifier</key><string>dev.zcode.diag</string>
+            <key>CFBundleName</key><string>Mini</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>1.0</string>
+            <key>CFBundleVersion</key><string>1</string>
+          </dict>
+          </plist>
+          EOF
+          echo "mini app ready"
+
+      - name: Sign with --timestamp (default)
+        run: |
+          set -uo pipefail
+          keychain="$HOME/Library/Keychains/diag.keychain"
+          rm -rf Mini-ts.app && cp -R Mini.app Mini-ts.app
+          codesign --force --timestamp --options runtime --keychain "$keychain" --sign "ZCode Fork Signing" Mini-ts.app > ts.out 2>&1 &
+          pid=$!
+          for i in $(seq 1 24); do
+            sleep 10
+            kill -0 $pid 2>/dev/null || break
+          done
+          if kill -0 $pid 2>/dev/null; then
+            echo "::error::--timestamp codesign 挂起超过 240 秒"
+            sample $(pgrep -n codesign) 3 2>/dev/null | head -40 || true
+            kill -9 $pid 2>/dev/null || true
+            exit 1
+          fi
+          wait $pid; echo "exit=$?"
+          cat ts.out
+          codesign -dv Mini-ts.app 2>&1 | grep -E "Authority|Signature" || true
+
+      - name: Sign with --timestamp=none
+        run: |
+          set -uo pipefail
+          keychain="$HOME/Library/Keychains/diag.keychain"
+          rm -rf Mini-nots.app && cp -R Mini.app Mini-nots.app
+          codesign --force --timestamp=none --options runtime --keychain "$keychain" --sign "ZCode Fork Signing" Mini-nots.app > nots.out 2>&1 &
+          pid=$!
+          for i in $(seq 1 24); do
+            sleep 10
+            kill -0 $pid 2>/dev/null || break
+          done
+          if kill -0 $pid 2>/dev/null; then
+            echo "::error::--timestamp=none codesign 也挂起——问题在钥匙串/密钥访问"
+            sample $(pgrep -n codesign) 3 2>/dev/null | head -40 || true
+            kill -9 $pid 2>/dev/null || true
+            exit 1
+          fi
+          wait $pid; echo "exit=$?"
+          cat nots.out
+          codesign -dv Mini-nots.app 2>&1 | grep -E "Authority|Signature" || true
