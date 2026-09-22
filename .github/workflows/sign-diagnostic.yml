@@ -35,7 +35,10 @@ jobs:
           openssl pkcs12 -in cert.p12 -clcerts -nokeys -passin "pass:$CSC_KEY_PASSWORD_SECRET" -out cert.pem
           security import cert.p12 -k "$keychain" -P "$CSC_KEY_PASSWORD_SECRET" -T /usr/bin/codesign
           sudo security add-trusted-cert -d -r trustRoot -k "$keychain" cert.pem
-          security set-key-partition-list -S apple-tool:,apple-sig:,codesign: -k "$keychain_password" "$keychain" > /dev/null
+          echo "=== set-key-partition-list 完整输出 ==="
+          security set-key-partition-list -S apple-tool:,apple-sig:,codesign: -k "$keychain_password" "$keychain"
+          echo "=== partition-list 之后立即重新解锁 ==="
+          security unlock-keychain -p "$keychain_password" "$keychain"
           security find-identity -v -p codesigning "$keychain"
 
       - name: Build mini app
