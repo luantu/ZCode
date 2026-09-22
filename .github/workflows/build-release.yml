@@ -92,11 +92,14 @@ jobs:
           echo "$CSC_LINK_SECRET" | base64 -d > cert.p12
           openssl pkcs12 -in cert.p12 -clcerts -nokeys -passin "pass:$CSC_KEY_PASSWORD_SECRET" -out cert.pem
 
-          security import cert.p12 -k "$keychain" -P "$CSC_KEY_PASSWORD_SECRET" -T /usr/bin/codesign
+          # 必须用 -A（允许任意应用访问）而非 -T /usr/bin/codesign：
+          # -T 建立的是"指定应用白名单"ACL，与 set-key-partition-list 的分区转换不兼容，
+          # 首次用钥时 securityd 仍会等待授权弹窗，在无头 runner 上永久挂起。
+          security import cert.p12 -k "$keychain" -P "$CSC_KEY_PASSWORD_SECRET" -A
           # 自签证书必须在钥匙串里显式信任，electron-builder 的 find-identity -v 才认；
           # 否则它会静默回退 ad-hoc 签名，破坏 Squirrel 更新的签名一致性。
           sudo security add-trusted-cert -d -r trustRoot -k "$keychain" cert.pem
-          security set-key-partition-list -S apple-tool:,apple-sig:,codesign: -k "$keychain_password" "$keychain" > /dev/null
+          security set-key-partition-list -S apple-tool:,apple-sig:,codesign: -k "$keychain_password" "$keychain"
           security find-identity -v -p codesigning "$keychain"
 
       - uses: pnpm/action-setup@v4
