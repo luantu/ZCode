@@ -1,6 +1,10 @@
 {
   "schemaVersion": 1,
+<<<<<<< HEAD
   "revision": 31,
+=======
+  "revision": 33,
+>>>>>>> upstream/main
   "config": {
     "providerConfigRules": {
       "templateRules": [
@@ -300,8 +304,8 @@
         {
           "templateId": "xiaomi-mimo",
           "templateNameMap": {
-            "zh-CN": "Xiaomi MiMo",
-            "en-US": "Xiaomi MiMo"
+            "zh-CN": "Xiaomi MiMo API",
+            "en-US": "Xiaomi MiMo API"
           },
           "config": {
             "access": {
@@ -312,7 +316,29 @@
               "type": "anthropic-messages",
               "baseUrl": "https://api.xiaomimimo.com/anthropic"
             },
-            "builtinModelIds": ["mimo-v2.5-pro", "mimo-v2.5"],
+            "builtinModelIds": ["mimo-v2.6-pro", "mimo-v2.6-flash", "mimo-v2.5-pro", "mimo-v2.5"],
+            "logo": {
+              "type": "builtin",
+              "key": "xiaomi-mimo"
+            }
+          }
+        },
+        {
+          "templateId": "xiaomi-mimo-token-plan",
+          "templateNameMap": {
+            "zh-CN": "Xiaomi MiMo Token Plan",
+            "en-US": "Xiaomi MiMo Token Plan"
+          },
+          "config": {
+            "access": {
+              "type": "api-key",
+              "apiKeyManagementUrl": "https://platform.xiaomimimo.com/"
+            },
+            "api": {
+              "type": "anthropic-messages",
+              "baseUrl": "https://token-plan-cn.xiaomimimo.com/anthropic"
+            },
+            "builtinModelIds": ["mimo-v2.6-pro", "mimo-v2.6-flash"],
             "logo": {
               "type": "builtin",
               "key": "xiaomi-mimo"
@@ -852,6 +878,50 @@
             "api": {
               "type": "anthropic-messages",
               "baseUrl": "https://zcode.z.ai/api/v1/off-peak/anthropic"
+            },
+            "logo": {
+              "type": "builtin",
+              "key": "bigmodel"
+            }
+          }
+        },
+        {
+          "providerId": "account:zai-highspeed-card",
+          "providerName": "Z.AI Highspeed card",
+          "config": {
+            "group": "zai-family",
+            "builtinModelIds": ["GLM-5.3", "GLM-5.3-Flash"],
+            "visibility": "hidden",
+            "access": {
+              "type": "zhipu-account",
+              "mode": "highspeed",
+              "accountType": "zai"
+            },
+            "api": {
+              "type": "anthropic-messages",
+              "baseUrl": "https://zcode.z.ai/api/v1/highspeed/anthropic"
+            },
+            "logo": {
+              "type": "builtin",
+              "key": "zai"
+            }
+          }
+        },
+        {
+          "providerId": "account:bigmodel-highspeed-card",
+          "providerName": "BigModel Highspeed card",
+          "config": {
+            "group": "bigmodel-family",
+            "builtinModelIds": ["GLM-5.3", "GLM-5.3-Flash"],
+            "visibility": "hidden",
+            "access": {
+              "type": "zhipu-account",
+              "mode": "highspeed",
+              "accountType": "bigmodel"
+            },
+            "api": {
+              "type": "anthropic-messages",
+              "baseUrl": "https://zcode.z.ai/api/v1/highspeed/anthropic"
             },
             "logo": {
               "type": "builtin",
@@ -1596,7 +1666,7 @@
           "config": {
             "enabled": true,
             "properties": {
-              "contextWindow": 200000,
+              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsText": true,
                 "supportsImage": false,
@@ -1615,7 +1685,7 @@
             },
             "optionSpecs": {
               "maxOutputTokens": {
-                "max": 32000
+                "max": 128000
               },
               "reasoningLevel": {
                 "values": ["disabled", "enabled"],
@@ -1625,25 +1695,7 @@
           }
         },
         {
-          "modelMatch": ".*\\[1m\\]",
-          "config": {
-            "properties": {
-              "contextWindow": 1000000
-            }
-          }
-        },
-        {
-          "modelMatch": ".*(?:ox-alpha|glm-x-preview-f|x-preview-f-free).*",
-          "config": {
-            "optionSpecs": {
-              "maxOutputTokens": {
-                "max": 128000
-              }
-            }
-          }
-        },
-        {
-          "modelMatch": ".*glm-5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5.*",
           "config": {
             "properties": {
               "contextWindow": 200000,
@@ -1663,7 +1715,7 @@
           }
         },
         {
-          "modelMatch": ".*GLM-5\\.2(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*GLM-5\\.2.*",
           "config": {
             "properties": {
               "contextWindow": 1000000,
@@ -1683,7 +1735,7 @@
           }
         },
         {
-          "modelMatch": ".*GLM-5-Turbo(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*GLM-5-Turbo.*",
           "config": {
             "properties": {
               "contextWindow": 200000,
@@ -1703,7 +1755,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-5\\.3(?:-flash)?(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5\\.3.*",
           "config": {
             "properties": {
               "contextWindow": 1000000,
@@ -1723,7 +1775,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-5\\.3-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5\\.3-flash.*",
           "config": {
             "properties": {
               "inputFormat": {
@@ -1735,7 +1787,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-5\\.1(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5\\.1.*",
           "config": {
             "properties": {
               "contextWindow": 200000,
@@ -1755,7 +1807,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-5\\.1-highspeed(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5\\.1-highspeed.*",
           "config": {
             "properties": {
               "contextWindow": 200000,
@@ -1775,7 +1827,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-5v-turbo(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5v-turbo.*",
           "config": {
             "properties": {
               "contextWindow": 200000,
@@ -1795,7 +1847,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.7(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.7.*",
           "config": {
             "properties": {
               "contextWindow": 200000,
@@ -1815,7 +1867,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.7-flashx(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.7-flash.*",
           "config": {
             "properties": {
               "contextWindow": 200000,
@@ -1835,7 +1887,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.7-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.7-flashx.*",
           "config": {
             "properties": {
               "contextWindow": 200000,
@@ -1855,7 +1907,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.6(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.6.*",
           "config": {
             "properties": {
               "contextWindow": 200000,
@@ -1875,7 +1927,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.5.*",
           "config": {
             "properties": {
               "contextWindow": 131072,
@@ -1895,7 +1947,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.5-air(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.5-air.*",
           "config": {
             "properties": {
               "contextWindow": 131072,
@@ -1915,7 +1967,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.6v(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.6v.*",
           "config": {
             "properties": {
               "contextWindow": 131072,
@@ -1932,7 +1984,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.6v-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.6v-flash.*",
           "config": {
             "properties": {
               "contextWindow": 131072,
@@ -1949,7 +2001,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.6v-flashx(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.6v-flashx.*",
           "config": {
             "properties": {
               "contextWindow": 131072,
@@ -1966,7 +2018,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.1v-thinking-flashx(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.1v-thinking-flash.*",
           "config": {
             "properties": {
               "contextWindow": 65536,
@@ -1983,7 +2035,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.1v-thinking-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.1v-thinking-flashx.*",
           "config": {
             "properties": {
               "contextWindow": 65536,
@@ -2000,7 +2052,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4-flashx-250414(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4-flashx-250414.*",
           "config": {
             "properties": {
               "contextWindow": 131072,
@@ -2017,7 +2069,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4-flash-250414(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4-flash-250414.*",
           "config": {
             "properties": {
               "contextWindow": 131072,
@@ -2034,7 +2086,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4v-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4v-flash.*",
           "config": {
             "properties": {
               "contextWindow": 16384,
@@ -2051,7 +2103,7 @@
           }
         },
         {
-          "modelMatch": ".*codegeex-4(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*codegeex-4.*",
           "config": {
             "properties": {
               "contextWindow": 131072,
@@ -2068,7 +2120,7 @@
           }
         },
         {
-          "modelMatch": ".*charglm-4(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*charglm-4.*",
           "config": {
             "properties": {
               "contextWindow": 8192,
@@ -2085,7 +2137,7 @@
           }
         },
         {
-          "modelMatch": ".*emohaa(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*emohaa.*",
           "config": {
             "properties": {
               "contextWindow": 8192,
@@ -2102,7 +2154,7 @@
           }
         },
         {
-          "modelMatch": ".*gpt-5\\.6(?:-(?:sol|terra|luna))?(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*gpt-5\\.6.*",
           "config": {
             "properties": {
               "contextWindow": 1050000,
@@ -2117,15 +2169,12 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "values": ["none", "low", "medium", "high", "xhigh", "max"]
-              },
-              "maxOutputTokens": {
-                "max": 128000
               }
             }
           }
         },
         {
-          "modelMatch": ".*gpt-5\\.3-codex(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*gpt-5\\.3-codex.*",
           "config": {
             "properties": {
               "contextWindow": 400000,
@@ -2140,15 +2189,12 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "values": ["low", "medium", "high", "xhigh"]
-              },
-              "maxOutputTokens": {
-                "max": 128000
               }
             }
           }
         },
         {
-          "modelMatch": ".*gpt-6-astra(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*gpt-6-astra.*",
           "config": {
             "properties": {
               "contextWindow": 1050000,
@@ -2163,15 +2209,12 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "values": ["low", "medium", "high", "xhigh", "max"]
-              },
-              "maxOutputTokens": {
-                "max": 128000
               }
             }
           }
         },
         {
-          "modelMatch": ".*gpt-5\\.4(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*gpt-5\\.4.*",
           "config": {
             "properties": {
               "contextWindow": 1050000,
@@ -2186,15 +2229,12 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "values": ["none", "low", "medium", "high", "xhigh"]
-              },
-              "maxOutputTokens": {
-                "max": 128000
               }
             }
           }
         },
         {
-          "modelMatch": ".*gpt-5\\.4-pro(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*gpt-5\\.4-pro.*",
           "config": {
             "properties": {
               "contextWindow": 1050000,
@@ -2209,15 +2249,12 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "values": ["medium", "high", "xhigh"]
-              },
-              "maxOutputTokens": {
-                "max": 128000
               }
             }
           }
         },
         {
-          "modelMatch": ".*gpt-5\\.4-mini(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*gpt-5\\.4-mini.*",
           "config": {
             "properties": {
               "contextWindow": 400000,
@@ -2232,15 +2269,12 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "values": ["none", "low", "medium", "high", "xhigh"]
-              },
-              "maxOutputTokens": {
-                "max": 128000
               }
             }
           }
         },
         {
-          "modelMatch": ".*gpt-5\\.4-nano(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*gpt-5\\.4-nano.*",
           "config": {
             "properties": {
               "contextWindow": 400000,
@@ -2255,18 +2289,14 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "values": ["none", "low", "medium", "high", "xhigh"]
-              },
-              "maxOutputTokens": {
-                "max": 128000
               }
             }
           }
         },
         {
-          "modelMatch": ".*claude-(?:fable|opus|sonnet)-5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*claude-(?:fable|opus|sonnet)-5.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": false,
@@ -2278,15 +2308,12 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "values": ["low", "medium", "high", "xhigh", "max"]
-              },
-              "maxOutputTokens": {
-                "max": 128000
               }
             }
           }
         },
         {
-          "modelMatch": ".*claude-haiku-4[.-]5(?:-20251001)?(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*claude-haiku-4[.-]5.*",
           "config": {
             "properties": {
               "contextWindow": 200000,
@@ -2306,10 +2333,9 @@
           }
         },
         {
-          "modelMatch": ".*claude-(?:fable|mythos)-5[.-]1(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*claude-(?:fable|mythos)-5[.-]1.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": false,
@@ -2321,15 +2347,12 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "values": ["low", "medium", "high", "xhigh", "max"]
-              },
-              "maxOutputTokens": {
-                "max": 128000
               }
             }
           }
         },
         {
-          "modelMatch": ".*grok-4\\.6(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*grok-4\\.6.*",
           "config": {
             "properties": {
               "contextWindow": 500000,
@@ -2344,15 +2367,12 @@
             "optionSpecs": {
               "reasoningLevel": {
                 "values": ["low", "medium", "high", "xhigh"]
-              },
-              "maxOutputTokens": {
-                "max": 128000
               }
             }
           }
         },
         {
-          "modelMatch": ".*grok-build-0\\.1(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*grok-build-0\\.1.*",
           "config": {
             "properties": {
               "contextWindow": 256000,
@@ -2363,19 +2383,13 @@
                 "supportsPdf": false
               },
               "supportsJsonSchemaOutput": true
-            },
-            "optionSpecs": {
-              "maxOutputTokens": {
-                "max": 128000
-              }
             }
           }
         },
         {
-          "modelMatch": ".*grok-4\\.3(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*grok-4\\.3.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": false,
@@ -2383,16 +2397,11 @@
                 "supportsPdf": false
               },
               "supportsJsonSchemaOutput": true
-            },
-            "optionSpecs": {
-              "maxOutputTokens": {
-                "max": 128000
-              }
             }
           }
         },
         {
-          "modelMatch": ".*kimi-k3(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k3.*",
           "config": {
             "properties": {
               "contextWindow": 1048576,
@@ -2412,7 +2421,7 @@
           }
         },
         {
-          "modelMatch": ".*k3(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*k3.*",
           "config": {
             "properties": {
               "contextWindow": 1048576,
@@ -2432,7 +2441,7 @@
           }
         },
         {
-          "modelMatch": ".*k3-256k(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*k3-256k.*",
           "config": {
             "properties": {
               "contextWindow": 262144,
@@ -2452,7 +2461,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k2\\.7-code(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k2\\.7-code.*",
           "config": {
             "properties": {
               "contextWindow": 262144,
@@ -2472,7 +2481,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k2\\.6(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k2\\.6.*",
           "config": {
             "properties": {
               "contextWindow": 262144,
@@ -2492,7 +2501,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k2\\.5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k2\\.5.*",
           "config": {
             "properties": {
               "contextWindow": 262144,
@@ -2512,7 +2521,7 @@
           }
         },
         {
-          "modelMatch": ".*moonshot-v1-8k(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*moonshot-v1-8k.*",
           "config": {
             "properties": {
               "contextWindow": 8192,
@@ -2529,7 +2538,7 @@
           }
         },
         {
-          "modelMatch": ".*moonshot-v1-32k(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*moonshot-v1-32k.*",
           "config": {
             "properties": {
               "contextWindow": 32768,
@@ -2546,7 +2555,7 @@
           }
         },
         {
-          "modelMatch": ".*moonshot-v1-128k(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*moonshot-v1-128k.*",
           "config": {
             "properties": {
               "contextWindow": 131072,
@@ -2563,7 +2572,7 @@
           }
         },
         {
-          "modelMatch": ".*moonshot-v1-8k-vision-preview(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*moonshot-v1-8k-vision-preview.*",
           "config": {
             "properties": {
               "contextWindow": 8192,
@@ -2580,7 +2589,7 @@
           }
         },
         {
-          "modelMatch": ".*moonshot-v1-32k-vision-preview(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*moonshot-v1-32k-vision-preview.*",
           "config": {
             "properties": {
               "contextWindow": 32768,
@@ -2597,7 +2606,7 @@
           }
         },
         {
-          "modelMatch": ".*moonshot-v1-128k-vision-preview(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*moonshot-v1-128k-vision-preview.*",
           "config": {
             "properties": {
               "contextWindow": 131072,
@@ -2614,10 +2623,9 @@
           }
         },
         {
-          "modelMatch": ".*MiniMax-M3(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*MiniMax-M3.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": true
@@ -2631,7 +2639,7 @@
           }
         },
         {
-          "modelMatch": ".*MiniMax-M2(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*MiniMax-M2.*",
           "config": {
             "properties": {
               "contextWindow": 204800,
@@ -2648,7 +2656,7 @@
           }
         },
         {
-          "modelMatch": ".*MiniMax-M2\\.7(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*MiniMax-M2\\.7.*",
           "config": {
             "properties": {
               "contextWindow": 204800,
@@ -2665,7 +2673,7 @@
           }
         },
         {
-          "modelMatch": ".*MiniMax-M2\\.7-highspeed(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*MiniMax-M2\\.7-highspeed.*",
           "config": {
             "properties": {
               "contextWindow": 204800,
@@ -2682,7 +2690,7 @@
           }
         },
         {
-          "modelMatch": ".*MiniMax-M2\\.5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*MiniMax-M2\\.5.*",
           "config": {
             "properties": {
               "contextWindow": 204800,
@@ -2699,7 +2707,7 @@
           }
         },
         {
-          "modelMatch": ".*MiniMax-M2\\.5-highspeed(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*MiniMax-M2\\.5-highspeed.*",
           "config": {
             "properties": {
               "contextWindow": 204800,
@@ -2716,7 +2724,7 @@
           }
         },
         {
-          "modelMatch": ".*MiniMax-M2\\.1(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*MiniMax-M2\\.1.*",
           "config": {
             "properties": {
               "contextWindow": 204800,
@@ -2733,7 +2741,7 @@
           }
         },
         {
-          "modelMatch": ".*MiniMax-M2\\.1-highspeed(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*MiniMax-M2\\.1-highspeed.*",
           "config": {
             "properties": {
               "contextWindow": 204800,
@@ -2750,10 +2758,9 @@
           }
         },
         {
-          "modelMatch": ".*deepseek-v4-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-v4-flash.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": false,
                 "supportsVideo": false
@@ -2771,10 +2778,9 @@
           }
         },
         {
-          "modelMatch": ".*deepseek-v4-pro(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-v4-pro.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": false,
                 "supportsVideo": false
@@ -2792,10 +2798,9 @@
           }
         },
         {
-          "modelMatch": ".*deepseek-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-flash.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": false
@@ -2813,10 +2818,9 @@
           }
         },
         {
-          "modelMatch": ".*deepseek-v4[.-]1-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-v4[.-]1-flash.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": false
@@ -2834,10 +2838,9 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.8-(?:max|flash)(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.8-(?:max|flash).*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": true
@@ -2855,10 +2858,9 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.5-plus(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.5-plus.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": true
@@ -2876,10 +2878,9 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.5-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.5-flash.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": true
@@ -2897,7 +2898,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3-max(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3-max.*",
           "config": {
             "properties": {
               "contextWindow": 262144,
@@ -2914,10 +2915,9 @@
           }
         },
         {
-          "modelMatch": ".*qwen-plus(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen-plus.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": false,
                 "supportsVideo": false
@@ -2934,10 +2934,9 @@
           }
         },
         {
-          "modelMatch": ".*qwen-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen-flash.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": false,
                 "supportsVideo": false
@@ -2954,7 +2953,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3-vl-plus(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3-vl-plus.*",
           "config": {
             "properties": {
               "contextWindow": 262144,
@@ -2975,10 +2974,9 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.7-max(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.7-max.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": false,
                 "supportsVideo": false
@@ -2996,10 +2994,9 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.7-plus(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.7-plus.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": true
@@ -3017,10 +3014,9 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.7-flash(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.7-flash.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": true
@@ -3038,10 +3034,9 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.6-plus(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.6-plus.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": true
@@ -3059,10 +3054,9 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.6-flash(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.6-flash.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": true,
                 "supportsVideo": true
@@ -3080,7 +3074,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.7-max-2026-06-08(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.7-max-2026-06-08.*",
           "config": {
             "properties": {
               "inputFormat": {
@@ -3091,7 +3085,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.8-omni-flash(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.8-omni-flash.*",
           "config": {
             "properties": {
               "contextWindow": 65536,
@@ -3113,7 +3107,7 @@
           }
         },
         {
-          "modelMatch": ".*mimo-v2\\.5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2\\.6-(?:pro|flash).*",
           "config": {
             "properties": {
               "contextWindow": 1000000,
@@ -3134,10 +3128,29 @@
           }
         },
         {
-          "modelMatch": ".*mimo-v2\\.5-pro(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2\\.5.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
+              "inputFormat": {
+                "supportsImage": true,
+                "supportsVideo": true,
+                "supportsAudio": true
+              }
+            },
+            "optionSpecs": {
+              "reasoningLevel": {
+                "values": ["disabled", "enabled"]
+              },
+              "maxOutputTokens": {
+                "max": 131072
+              }
+            }
+          }
+        },
+        {
+          "modelMatch": ".*mimo-v2\\.5-pro.*",
+          "config": {
+            "properties": {
               "inputFormat": {
                 "supportsImage": false,
                 "supportsVideo": false,
@@ -3155,10 +3168,9 @@
           }
         },
         {
-          "modelMatch": ".*mimo-v2-pro(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2-pro.*",
           "config": {
             "properties": {
-              "contextWindow": 1000000,
               "inputFormat": {
                 "supportsImage": false,
                 "supportsVideo": false
@@ -3172,7 +3184,7 @@
           }
         },
         {
-          "modelMatch": ".*mimo-v2-omni(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2-omni.*",
           "config": {
             "properties": {
               "contextWindow": 262144,
@@ -3189,7 +3201,7 @@
           }
         },
         {
-          "modelMatch": ".*mimo-v2-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2-flash.*",
           "config": {
             "properties": {
               "contextWindow": 262144,
@@ -3211,7 +3223,7 @@
       ],
       "modelApiRules": [
         {
-          "modelMatch": ".*claude-(?:opus-(?:4[.-]8|5)|(?:fable|mythos)-5(?:[.-]1)?)(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*claude-(?:opus-(?:4[.-]8|5)|(?:fable|mythos)-5(?:[.-]1)?).*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "properties": {
@@ -3286,7 +3298,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3297,7 +3309,7 @@
           }
         },
         {
-          "modelMatch": ".*GLM-5\\.2(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*GLM-5\\.2.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3308,7 +3320,7 @@
           }
         },
         {
-          "modelMatch": ".*GLM-5-Turbo(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*GLM-5-Turbo.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3319,7 +3331,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-5\\.3(?:-flash)?(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5\\.3.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3330,7 +3342,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-5\\.1(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5\\.1.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3341,7 +3353,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-5\\.1-highspeed(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5\\.1-highspeed.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3352,7 +3364,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-5v-turbo(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-5v-turbo.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3363,7 +3375,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.7(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.7.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3374,7 +3386,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.7-flashx(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.7-flashx.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3385,7 +3397,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.7-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.7-flash.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3396,7 +3408,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.6(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.6(?!v).*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3407,7 +3419,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.5.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3418,7 +3430,7 @@
           }
         },
         {
-          "modelMatch": ".*glm-4\\.5-air(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*glm-4\\.5-air.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3429,7 +3441,7 @@
           }
         },
         {
-          "modelMatch": ".*gpt-5\\.6(?:-(?:sol|terra|luna))?(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*gpt-5\\.6.*",
           "apiTypeMatch": "openai-responses",
           "config": {
             "optionSpecs": {
@@ -3440,7 +3452,7 @@
           }
         },
         {
-          "modelMatch": ".*gpt-5\\.3-codex(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*gpt-5\\.3-codex.*",
           "apiTypeMatch": "openai-responses",
           "config": {
             "optionSpecs": {
@@ -3451,7 +3463,7 @@
           }
         },
         {
-          "modelMatch": ".*claude-(?:fable|opus|sonnet)-5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*claude-(?:fable|opus|sonnet)-5.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3462,7 +3474,7 @@
           }
         },
         {
-          "modelMatch": ".*grok-4\\.6(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*grok-4\\.6.*",
           "apiTypeMatch": "openai-responses",
           "config": {
             "optionSpecs": {
@@ -3473,7 +3485,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k3(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k3.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3484,7 +3496,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k3(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k3.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3495,7 +3507,7 @@
           }
         },
         {
-          "modelMatch": ".*k3(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*k3.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3506,7 +3518,7 @@
           }
         },
         {
-          "modelMatch": ".*k3(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*k3.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3517,7 +3529,7 @@
           }
         },
         {
-          "modelMatch": ".*k3-256k(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*k3-256k.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3528,7 +3540,7 @@
           }
         },
         {
-          "modelMatch": ".*k3-256k(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*k3-256k.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3539,7 +3551,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k2\\.7-code(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k2\\.7-code.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3550,7 +3562,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k2\\.7-code(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k2\\.7-code.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3561,7 +3573,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k2\\.7-code(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k2\\.7-code.*",
           "apiTypeMatch": "openai-responses",
           "config": {
             "optionSpecs": {
@@ -3572,7 +3584,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k2\\.6(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k2\\.6.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3583,7 +3595,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k2\\.6(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k2\\.6.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3594,7 +3606,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k2\\.5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k2\\.5.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3605,7 +3617,7 @@
           }
         },
         {
-          "modelMatch": ".*kimi-k2\\.5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*kimi-k2\\.5.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3616,29 +3628,7 @@
           }
         },
         {
-          "modelMatch": ".*deepseek-v4-flash(?:[.\\-:/\\[].*)?",
-          "apiTypeMatch": "anthropic-messages",
-          "config": {
-            "optionSpecs": {
-              "reasoningLevel": {
-                "map": "reasoningLevel == \"disabled\"\n  ? {\n      \"thinking\": {\n        \"type\": \"disabled\"\n      }\n    }\n  : {\n      \"thinking\": {\n        \"type\": \"enabled\"\n      },\n      \"output_config\": {\n        \"effort\": reasoningLevel\n      }\n    }"
-              }
-            }
-          }
-        },
-        {
-          "modelMatch": ".*deepseek-v4-flash(?:[.\\-:/\\[].*)?",
-          "apiTypeMatch": "openai-chat-completions",
-          "config": {
-            "optionSpecs": {
-              "reasoningLevel": {
-                "map": "reasoningLevel == \"disabled\"\n  ? {\n      \"thinking\": {\n        \"type\": \"disabled\"\n      }\n    }\n  : {\n      \"thinking\": {\n        \"type\": \"enabled\"\n      },\n      \"reasoning_effort\": reasoningLevel\n    }"
-              }
-            }
-          }
-        },
-        {
-          "modelMatch": ".*deepseek-v4-pro(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-v4-flash.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3649,7 +3639,7 @@
           }
         },
         {
-          "modelMatch": ".*deepseek-v4-pro(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-v4-flash.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3660,7 +3650,29 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.8-(?:max|flash)(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-v4-pro.*",
+          "apiTypeMatch": "anthropic-messages",
+          "config": {
+            "optionSpecs": {
+              "reasoningLevel": {
+                "map": "reasoningLevel == \"disabled\"\n  ? {\n      \"thinking\": {\n        \"type\": \"disabled\"\n      }\n    }\n  : {\n      \"thinking\": {\n        \"type\": \"enabled\"\n      },\n      \"output_config\": {\n        \"effort\": reasoningLevel\n      }\n    }"
+              }
+            }
+          }
+        },
+        {
+          "modelMatch": ".*deepseek-v4-pro.*",
+          "apiTypeMatch": "openai-chat-completions",
+          "config": {
+            "optionSpecs": {
+              "reasoningLevel": {
+                "map": "reasoningLevel == \"disabled\"\n  ? {\n      \"thinking\": {\n        \"type\": \"disabled\"\n      }\n    }\n  : {\n      \"thinking\": {\n        \"type\": \"enabled\"\n      },\n      \"reasoning_effort\": reasoningLevel\n    }"
+              }
+            }
+          }
+        },
+        {
+          "modelMatch": ".*qwen3\\.8-(?:max|flash).*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3671,7 +3683,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.8-(?:max|flash)(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.8-(?:max|flash).*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3682,7 +3694,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.8-(?:max|flash)(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.8-(?:max|flash).*",
           "apiTypeMatch": "openai-responses",
           "config": {
             "optionSpecs": {
@@ -3693,7 +3705,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.5-plus(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.5-plus.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3704,7 +3716,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.5-plus(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.5-plus.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3715,7 +3727,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.5-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.5-flash.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3726,7 +3738,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.5-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.5-flash.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3737,7 +3749,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen-plus(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen-plus.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3748,7 +3760,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen-plus(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen-plus.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3759,7 +3771,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen-flash.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3770,7 +3782,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen-flash.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3781,7 +3793,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3-vl-plus(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3-vl-plus.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3792,7 +3804,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3-vl-plus(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*qwen3-vl-plus.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3803,7 +3815,7 @@
           }
         },
         {
-          "modelMatch": ".*mimo-v2\\.5(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2\\.6-(?:pro|flash).*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3814,18 +3826,7 @@
           }
         },
         {
-          "modelMatch": ".*mimo-v2\\.5(?:[.\\-:/\\[].*)?",
-          "apiTypeMatch": "openai-chat-completions",
-          "config": {
-            "optionSpecs": {
-              "reasoningLevel": {
-                "map": "{\n  \"thinking\": {\n    \"type\": reasoningLevel == \"enabled\" ? \"enabled\" : \"disabled\"\n  }\n}"
-              }
-            }
-          }
-        },
-        {
-          "modelMatch": ".*mimo-v2\\.5-pro(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2\\.5.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3836,7 +3837,7 @@
           }
         },
         {
-          "modelMatch": ".*mimo-v2\\.5-pro(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2\\.5.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3847,7 +3848,7 @@
           }
         },
         {
-          "modelMatch": ".*mimo-v2-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2\\.5-pro.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3858,7 +3859,7 @@
           }
         },
         {
-          "modelMatch": ".*mimo-v2-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2\\.5-pro.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3869,7 +3870,29 @@
           }
         },
         {
-          "modelMatch": ".*gpt-6-astra(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*mimo-v2-flash.*",
+          "apiTypeMatch": "anthropic-messages",
+          "config": {
+            "optionSpecs": {
+              "reasoningLevel": {
+                "map": "{\n  \"thinking\": {\n    \"type\": reasoningLevel == \"enabled\" ? \"enabled\" : \"disabled\"\n  }\n}"
+              }
+            }
+          }
+        },
+        {
+          "modelMatch": ".*mimo-v2-flash.*",
+          "apiTypeMatch": "openai-chat-completions",
+          "config": {
+            "optionSpecs": {
+              "reasoningLevel": {
+                "map": "{\n  \"thinking\": {\n    \"type\": reasoningLevel == \"enabled\" ? \"enabled\" : \"disabled\"\n  }\n}"
+              }
+            }
+          }
+        },
+        {
+          "modelMatch": ".*gpt-6-astra.*",
           "apiTypeMatch": "openai-responses",
           "config": {
             "optionSpecs": {
@@ -3880,7 +3903,7 @@
           }
         },
         {
-          "modelMatch": ".*claude-(?:fable|mythos)-5[.-]1(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*claude-(?:fable|mythos)-5[.-]1.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3891,7 +3914,7 @@
           }
         },
         {
-          "modelMatch": ".*deepseek-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-flash.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3902,7 +3925,7 @@
           }
         },
         {
-          "modelMatch": ".*deepseek-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-flash.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3913,7 +3936,7 @@
           }
         },
         {
-          "modelMatch": ".*gpt-5\\.4(?:-(?:pro|mini|nano))?(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*gpt-5\\.4.*",
           "apiTypeMatch": "openai-responses",
           "config": {
             "optionSpecs": {
@@ -3924,7 +3947,7 @@
           }
         },
         {
-          "modelMatch": ".*gpt-5\\.4(?:-(?:pro|mini|nano))?(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*gpt-5\\.4.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3935,7 +3958,7 @@
           }
         },
         {
-          "modelMatch": ".*deepseek-v4[.-]1-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-v4[.-]1-flash.*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3946,7 +3969,7 @@
           }
         },
         {
-          "modelMatch": ".*deepseek-v4[.-]1-flash(?:[.\\-:/\\[].*)?",
+          "modelMatch": ".*deepseek-v4[.-]1-flash.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3957,7 +3980,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.(?:7-(?:max|plus|flash)|6-(?:plus|flash))(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.(?:7-(?:max|plus|flash)|6-(?:plus|flash)).*",
           "apiTypeMatch": "anthropic-messages",
           "config": {
             "optionSpecs": {
@@ -3968,7 +3991,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.(?:7-(?:max|plus|flash)|6-(?:plus|flash))(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.(?:7-(?:max|plus|flash)|6-(?:plus|flash)).*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -3979,7 +4002,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.(?:7-(?:max|plus|flash)|6-(?:plus|flash))(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.(?:7-(?:max|plus|flash)|6-(?:plus|flash)).*",
           "apiTypeMatch": "openai-responses",
           "config": {
             "optionSpecs": {
@@ -3990,7 +4013,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.8-omni-flash(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.8-omni-flash.*",
           "apiTypeMatch": "openai-chat-completions",
           "config": {
             "optionSpecs": {
@@ -4001,7 +4024,7 @@
           }
         },
         {
-          "modelMatch": ".*qwen3\\.8-omni-flash(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+          "modelMatch": ".*qwen3\\.8-omni-flash.*",
           "apiTypeMatch": "openai-responses",
           "config": {
             "optionSpecs": {
@@ -4772,6 +4795,18 @@
           }
         },
         {
+          "modelMatch": ".*",
+          "baseUrlMatch": "https://zcode\\.z\\.ai/api/v1/highspeed/anthropic/?",
+          "config": {
+            "properties": {
+              "inputFormat": {
+                "supportsImage": true,
+                "supportsVideo": true
+              }
+            }
+          }
+        },
+        {
           "modelMatch": ".*claude-.*",
           "apiTypeMatch": "anthropic-messages",
           "baseUrlMatch": "(?:https://api\\.anthropic\\.com/v1)",
@@ -4854,6 +4889,17 @@
           "config": {
             "properties": {
               "supportsNativeWebSearch": false,
+              "supportsMidConversationSystem": true
+            }
+          }
+        },
+        {
+          "modelMatch": ".*",
+          "apiTypeMatch": "anthropic-messages",
+          "baseUrlMatch": "https://zcode\\.z\\.ai/api/v1/highspeed/anthropic/?",
+          "config": {
+            "properties": {
+              "supportsNativeWebSearch": true,
               "supportsMidConversationSystem": true
             }
           }
@@ -5467,6 +5513,34 @@
           "templateId": "qwen-alibaba-model-studio-intl",
           "config": {
             "enabled": false
+          }
+        },
+        {
+          "modelId": "mimo-v2.6-pro",
+          "templateId": "xiaomi-mimo",
+          "config": {
+            "enabled": true
+          }
+        },
+        {
+          "modelId": "mimo-v2.6-flash",
+          "templateId": "xiaomi-mimo",
+          "config": {
+            "enabled": true
+          }
+        },
+        {
+          "modelId": "mimo-v2.6-pro",
+          "templateId": "xiaomi-mimo-token-plan",
+          "config": {
+            "enabled": true
+          }
+        },
+        {
+          "modelId": "mimo-v2.6-flash",
+          "templateId": "xiaomi-mimo-token-plan",
+          "config": {
+            "enabled": true
           }
         },
         {
@@ -6929,6 +7003,34 @@
         },
         {
           "providerId": "account:bigmodel-offpeak-idle-plan",
+          "modelId": "GLM-5.3",
+          "config": {
+            "enabled": true
+          }
+        },
+        {
+          "providerId": "account:zai-highspeed-card",
+          "modelId": "GLM-5.3-Flash",
+          "config": {
+            "enabled": true
+          }
+        },
+        {
+          "providerId": "account:zai-highspeed-card",
+          "modelId": "GLM-5.3",
+          "config": {
+            "enabled": true
+          }
+        },
+        {
+          "providerId": "account:bigmodel-highspeed-card",
+          "modelId": "GLM-5.3-Flash",
+          "config": {
+            "enabled": true
+          }
+        },
+        {
+          "providerId": "account:bigmodel-highspeed-card",
           "modelId": "GLM-5.3",
           "config": {
             "enabled": true
