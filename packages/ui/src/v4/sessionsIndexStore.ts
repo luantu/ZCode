@@ -15,7 +15,7 @@ import { ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE } from "@zcode/services";
 import { logger } from "@/logger.js";
 import type { SessionsIndexTransport } from "@/v4/agentSessionsIndexTransport.js";
 
-interface SessionsIndexState {
+export interface SessionsIndexState {
   /** workspaceId → 已知；null = 尚无 snapshot。 */
   workspaceId: string | null;
   logEpoch: string | null;
@@ -25,7 +25,7 @@ interface SessionsIndexState {
   sessions: Map<string, SessionSummary>;
 }
 
-const EMPTY_SESSIONS_INDEX_STATE: SessionsIndexState = {
+export const EMPTY_SESSIONS_INDEX_STATE: SessionsIndexState = {
   workspaceId: null,
   logEpoch: null,
   seq: 0,
@@ -84,7 +84,7 @@ async function unsubscribeIgnoringFailure(
   }
 }
 
-interface ApplySessionsIndexResult {
+export interface ApplySessionsIndexResult {
   state: SessionsIndexState;
   /** true = 帧区间断档（fromSeq 与水位不衔接），调用方应重订阅。 */
   gap: boolean;
@@ -600,7 +600,15 @@ export class SessionsIndexStore {
     this.state = EMPTY_SESSIONS_INDEX_STATE;
     this.cachedList = null;
     this.status = "error";
-    logger.warn(`[v4-sessions-index] recovery fail-closed: ${reasonCode}`);
+    // 同 conversationProjectionStore：原 logger.warn 在生产构建下 no-op。这里的终态还会把
+    // 整个任务列表清空成 EMPTY_SESSIONS_INDEX_STATE，影响面比单个会话更大，更需要在打包版留痕。
+    logger.lifecycle.warn("v4 sessions index recovery fail-closed", {
+      event: "v4.sessions_index.recovery.fail_closed",
+      module: "ui.v4.sessions_index_store",
+      reasonCode,
+      scheduleRetry: options.scheduleRetry !== false,
+      status: "error",
+    });
     if (transport && previousSubscriptionId) {
       void unsubscribeIgnoringFailure(transport, previousSubscriptionId);
     }
