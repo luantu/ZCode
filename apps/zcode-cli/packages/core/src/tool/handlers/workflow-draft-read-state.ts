@@ -1,5 +1,6 @@
 // ============================================================
-// 内联草稿记作「模型写过的文件」
+// 内联草稿记作「模型写过的文件」（docs/dynamic-workflow/launch.md「Script files」→
+// 「An inline draft counts as written by the model」）
 // ============================================================
 // Edit / Write 拒绝会话没读过的文件（FILE_NOT_READ）：模型不能改它没见过的字节。内联草稿恰好是
 // 这条已经成立的文件——它的字节就是产生它的那次调用的 `script` 入参。不记这一笔，NOTE 要求的
@@ -13,10 +14,10 @@
 // 与草稿本身一样**尽力而为**：stat 不到就不记，模型的第一次 Edit 退回「先 Read」的老路。
 
 import { createReadFileStateMetadataFromEntry } from "../read-file-state-metadata.js";
-import { createReadFileStateKey, normalizeReadFileStateMtimeMs } from "../read-file-state.js";
+import { normalizeReadFileStateMtimeMs, setReadFileStateEntry } from "../read-file-state.js";
 import type { ReadFileStateEntry, ToolExecutionContext } from "../types.js";
 
-export type WorkflowDraftAuthoringTool = "CreateWorkflow" | "AmendWorkflow";
+export type WorkflowDraftAuthoringTool = "CreateWorkflow" | "AmendWorkflow" | "FillWorkflowHole";
 
 const CRLF_PATTERN = /\r\n/gu;
 const LF = "\n";
@@ -55,7 +56,7 @@ export async function recordAuthoredWorkflowDraft(
     mtimeMs: normalizeReadFileStateMtimeMs(revision.mtimeMs),
     sizeBytes: revision.sizeBytes ?? Buffer.byteLength(draft.source, "utf8"),
   };
-  readFileState.set(createReadFileStateKey(draft.path, 1, undefined), entry);
+  setReadFileStateEntry(readFileState, entry);
 
   // resume 只从 tool part metadata 恢复 read-state（read-file-state-hydrator.ts），不落这一笔，
   // 会话恢复后同一个 bug 原样回来。
