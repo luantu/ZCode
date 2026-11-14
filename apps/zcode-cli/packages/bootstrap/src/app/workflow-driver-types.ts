@@ -16,6 +16,7 @@ import type {
   SubmitVerdict as ContractsSubmitVerdict,
   ToolArtifactStorePort,
   WorkflowEscalatePort,
+  WorkflowWebSearchBudgetPort,
   WorkflowSubmitPort,
 } from "@zcode/contracts";
 import type { AgentRuntime } from "@zcode/core";
@@ -73,6 +74,11 @@ export type ActorRuntimeFactory = (input: {
    * opt-in**——最可能撞上未预见之墙的 actor 恰是作者没标记的那一个。
    */
   escalatePort: WorkflowEscalatePort;
+  /**
+   * 每个 ask 的 WebSearch 预算端口：计数在 driver 的会话状态里（startAsk 归零），上限取
+   * persona 的 `budget.webSearch`，缺席用默认值。恒注入，与升级端口同路下传到 runtime deps。
+   */
+  webSearchBudgetPort: WorkflowWebSearchBudgetPort;
   /**
    * amend-resume 的会话种子，仅当本 actor 消费了 ≥1 条导入 ask 条目时在场。
    *
@@ -136,11 +142,6 @@ export interface AgentRuntimeWorkflowDriverDeps {
    */
   parentSessionId?: SessionId;
   /**
-   * world.run 的已批准命令集（编译期字面量收集）。
-   * 结构性地落进 {@link WorldReadDeps}：缺席即 world.run 全拒绝（fail-closed）。
-   */
-  declaredRunCommands?: ReadonlySet<string>;
-  /**
    * 每个 actor 站点的 submit profile，编译期由 `deriveActorSubmitProfiles` 算出（run 提交路径的
    * compileOnce）。可选：缺席 = 每个 actor 都 generic（历史行为），不算 profile 的装配
    * （snippet、fake driver、既有测试）因此一字不改。
@@ -156,12 +157,12 @@ export interface AgentRuntimeWorkflowDriverDeps {
    */
   concurrency?: WorkflowConcurrencyPort;
   /**
-   * 本 run 的座位闸门：本 run
+   * 本 run 的座位闸门（docs/dynamic-workflow/concurrency.md「Retuning a live run」）：本 run
    * **自己**的并发上界中途被改低时，超出的子代理在下一个 turn step 前停住。在场时 driver 做两件
    * 事——把每个 actor 的准入端口包进闸门，以及把 ask 的起止喂给它（startAsk 与引擎的
    * `node-settled`，见 workflow-driver.ts）。
    *
-   * 可选：缺席即这个 run 的上界从不中途变动（如不支持动态并发调整的 snippet 装配），准入端口与
+   * 可选：缺席即这个 run 的上界从不中途变动（snippet、fake driver、既有测试装配），准入端口与
    * 从前逐字相同。**在场也不改变从未被改低过的 run 的行为**：上界之上的请求原地通过，闸门不发
    * 任何事件、不持任何票。
    */
@@ -184,8 +185,8 @@ export interface AgentRuntimeWorkflowDriverDeps {
    */
   runId?: string;
   /**
-   * 时钟与定时器：run 级 stall 时钟、瞬态失败的退避
-   * 重驱与会话静默的有界等待都用它。支持注入时钟；`stallAfterMs` 缺省 20 分钟；
+   * 时钟与定时器（apps/zcode-cli/packages/dynamic-workflow/docs/execution-engine.md）：run 级 stall 时钟、瞬态失败的退避
+   * 重驱与会话静默的有界等待都用它。可注入只为测试假时间；`stallAfterMs` 缺省 20 分钟；
    * `quiesceMs` 缺省 {@link AMEND_TRANSCRIPT_QUIESCE_MS}；`random` 供退避抖动。
    */
   clock?: WorkflowClock & {
@@ -199,7 +200,7 @@ export interface AgentRuntimeWorkflowDriverDeps {
    *
    * 走回调而不是让 `createAgentRuntimeWorkflowDriver` 返回一个二元组：driver 实例由**引擎**
    * 在 `makeDriver(sink)` 时才造出来，装配方拿不到那个返回值。缺席即调用方不关心静默
-   * （如直接使用 harness 的路径）。
+   * （测试装配、直接用 harness 的路径）。
    */
   onQuiescenceProbe?: (probe: ActorSessionQuiescence) => void;
 }
@@ -235,6 +236,13 @@ export interface SessionState {
    * per-ask 计数，startAsk 归零；nudge 轮**不归零**（nudge 仍在同一个 ask 里）。
    */
   escalationsUsed: number;
+  /**
+   * 本次 ask 已发起的 WebSearch 次数（被预算拒掉的不计）。与 escalationsUsed 同族：per-ask，
+   * startAsk 归零，nudge / repair 轮不归零。
+   */
+  webSearchesUsed: number;
+  /** 本子代理每个 ask 的 WebSearch 上限：persona 的 `budget.webSearch` 或默认值，建会话时定下。 */
+  readonly webSearchLimit: number;
   /** 当前 ask 的 turn 取消控制器；startAsk 每 ask 重建。 */
   abortController?: AbortController;
   /** 当前 ask 已被引擎 accept：其 turn resolve 时不再上报 askTurnEnded（已由引擎结算）。 */
