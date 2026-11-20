@@ -4,15 +4,29 @@ import { arch, platform, release } from "node:os";
 import { join, posix } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { ZipFile } from "yazl";
-import { redactFeedbackText, ZCODE_VERSION, ZCODE_COMMIT } from "@zcode/shared";
+import {
+  redactFeedbackText,
+  ZCODE_VERSION,
+  ZCODE_COMMIT,
+  CLI_MEMORY_FILE_PATTERN,
+  CLI_MEMORY_MAX_FILE_BYTES,
+  CLI_MEMORY_MAX_FILES,
+  sanitizeCliMemoryDiagnostic,
+} from "@zcode/shared";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
 
-interface FeedbackLogSource {
+export interface FeedbackLogSource {
   directory: string;
   archivePrefix: string;
   exitLogsOnly?: boolean;
+  /** 只收集根目录下列出的文件名；用于允许单文件进入归档的配置入口。 */
+  includeFileNames?: readonly string[];
+  /** 默认只收集本地当天修改的文件；配置文件可关闭该限制。 */
+  onlyCurrentDay?: boolean;
+  /** 配置文件使用结构化安全投影，避免把插件自定义敏感项上传。 */
+  contentPolicy?: "diagnostic" | "cli-config" | "cli-memory";
 }
 
 function decodeDiagnosticLog(buffer: Buffer): string | null {
@@ -29,6 +43,129 @@ function decodeDiagnosticLog(buffer: Buffer): string | null {
       if (code < 32 && code !== 9 && code !== 10 && code !== 13) return null;
     }
     return text;
+  } catch {
+    return null;
+  }
+}
+
+type SafeScalarType = "boolean" | "number" | "string";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function pickSafeSection(
+  value: unknown,
+  scalarFields: Readonly<Record<string, SafeScalarType>> = {},
+  stringArrayFields: readonly string[] = [],
+  booleanMapFields: readonly string[] = [],
+): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined;
+  const result: Record<string, unknown> = {};
+  for (const [key, type] of Object.entries(scalarFields)) {
+    if (typeof value[key] === type) result[key] = value[key];
+  }
+  for (const key of stringArrayFields) {
+    const candidate = value[key];
+    if (Array.isArray(candidate) && candidate.every((item) => typeof item === "string")) {
+      result[key] = candidate;
+    }
+  }
+  for (const key of booleanMapFields) {
+    const candidate = value[key];
+    if (
+      isRecord(candidate) &&
+      Object.values(candidate).every((item) => typeof item === "boolean")
+    ) {
+      result[key] = candidate;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/** 只投影 CLI 的非敏感配置；插件 options、MCP、网络和 hooks 等未知字段全部舍弃。 */
+function sanitizeCliConfig(text: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+
+  const projection: Record<string, unknown> = {};
+  const root = pickSafeSection(parsed, { model: "string" });
+  if (root) Object.assign(projection, root);
+  const sections: ReadonlyArray<{
+    key: string;
+    scalarFields: Readonly<Record<string, SafeScalarType>>;
+    stringArrayFields?: readonly string[];
+    booleanMapFields?: readonly string[];
+  }> = [
+    { key: "modelStream", scalarFields: { idleTimeoutMs: "number" } },
+    {
+      key: "permission",
+      scalarFields: {
+        mode: "string",
+        autoApproveHighRisk: "boolean",
+        allowMediumRiskInAuto: "boolean",
+      },
+      stringArrayFields: ["allowedTools", "disallowedTools"],
+    },
+    {
+      key: "features",
+      scalarFields: {
+        compact: "boolean",
+        rewind: "boolean",
+        subagent: "boolean",
+        memory: "boolean",
+        skill: "boolean",
+        mcp: "boolean",
+      },
+    },
+    { key: "memory", scalarFields: { use: "boolean" } },
+    {
+      key: "plugins",
+      scalarFields: { enabled: "boolean" },
+      stringArrayFields: ["suppressedBuiltins"],
+      booleanMapFields: ["enabledPlugins"],
+    },
+    {
+      key: "skills",
+      scalarFields: {
+        enabled: "boolean",
+        includeInstructions: "boolean",
+        metadataBudget: "number",
+      },
+    },
+    { key: "logging", scalarFields: { level: "string", format: "string" } },
+    { key: "ui", scalarFields: { locale: "string", theme: "string" } },
+    { key: "toolConcurrency", scalarFields: { maxConcurrency: "number" } },
+    {
+      key: "modelAnomalyGuard",
+      scalarFields: {
+        toolCallWarningThreshold: "number",
+        repeatedToolCallWarningThreshold: "number",
+        maxBudgetWarningsPerTurn: "number",
+      },
+    },
+  ];
+  for (const sectionDefinition of sections) {
+    const section = pickSafeSection(
+      parsed[sectionDefinition.key],
+      sectionDefinition.scalarFields,
+      sectionDefinition.stringArrayFields,
+      sectionDefinition.booleanMapFields,
+    );
+    if (section) projection[sectionDefinition.key] = section;
+  }
+  return redactFeedbackText(JSON.stringify(projection, null, 2), { diagnostic: true });
+}
+
+function sanitizeCliMemory(text: string): string | null {
+  try {
+    const record = sanitizeCliMemoryDiagnostic(JSON.parse(text));
+    return record ? JSON.stringify(record) + "\n" : null;
   } catch {
     return null;
   }
@@ -61,6 +198,7 @@ export async function createFeedbackDiagnosticArchive(options: {
   try {
     options.onProgress?.({ processedBytes: 0, totalBytes: 0 });
     for (const source of options.sources) {
+      let memoryFiles = 0;
       // 不跟随诊断根目录本身的链接；规范化系统目录别名（如 macOS /var）。
       const root = await realpath(source.directory).catch(() => null);
       if (!root || !(await lstat(source.directory).catch(() => null))?.isDirectory()) continue;
@@ -72,15 +210,28 @@ export async function createFeedbackDiagnosticArchive(options: {
           if (entry.isSymbolicLink()) continue;
           const absolutePath = join(directory, entry.name);
           const name = posix.join(prefix, entry.name);
-          if (entry.isDirectory() && !source.exitLogsOnly) {
+          const isExplicitFileSource = source.includeFileNames !== undefined;
+          if (
+            entry.isDirectory() &&
+            !source.exitLogsOnly &&
+            !isExplicitFileSource &&
+            source.contentPolicy !== "cli-memory"
+          ) {
             await walk(absolutePath, name, depth + 1);
             continue;
           }
           if (
             !entry.isFile() ||
-            !(source.exitLogsOnly
-              ? entry.name.endsWith(".exit.log")
-              : /(?:\.log(?:\.\d+)?|\.jsonl|\.ndjson)$/i.test(entry.name))
+            (isExplicitFileSource
+              ? !source.includeFileNames!.includes(entry.name)
+              : !(source.exitLogsOnly
+                  ? entry.name.endsWith(".exit.log")
+                  : /(?:\.log(?:\.\d+)?|\.jsonl|\.ndjson)$/i.test(entry.name)))
+          )
+            continue;
+          if (
+            source.contentPolicy === "cli-memory" &&
+            (!CLI_MEMORY_FILE_PATTERN.test(entry.name) || memoryFiles >= CLI_MEMORY_MAX_FILES)
           )
             continue;
           if ((await realpath(absolutePath).catch(() => null)) !== absolutePath) {
@@ -91,9 +242,12 @@ export async function createFeedbackDiagnosticArchive(options: {
           if (
             !info?.isFile() ||
             info.nlink !== 1 ||
-            info.size > MAX_FILE_BYTES ||
+            info.size >
+              (source.contentPolicy === "cli-memory"
+                ? CLI_MEMORY_MAX_FILE_BYTES
+                : MAX_FILE_BYTES) ||
             totalBytes + info.size > budget ||
-            !isToday(info.mtimeMs)
+            (source.onlyCurrentDay !== false && !isToday(info.mtimeMs))
           ) {
             skipLogFile("metadata-policy");
             continue;
@@ -114,8 +268,11 @@ export async function createFeedbackDiagnosticArchive(options: {
               opened.nlink !== 1 ||
               opened.ino !== info.ino ||
               opened.dev !== info.dev ||
-              !isToday(opened.mtimeMs) ||
-              opened.size > MAX_FILE_BYTES ||
+              (source.onlyCurrentDay !== false && !isToday(opened.mtimeMs)) ||
+              opened.size >
+                (source.contentPolicy === "cli-memory"
+                  ? CLI_MEMORY_MAX_FILE_BYTES
+                  : MAX_FILE_BYTES) ||
               totalBytes + opened.size > budget
             ) {
               skipLogFile("opened-file-policy");
@@ -139,7 +296,22 @@ export async function createFeedbackDiagnosticArchive(options: {
               skipLogFile("unsupported-text");
               continue;
             }
-            const data = Buffer.from(redactFeedbackText(text, { diagnostic: true }));
+            const sanitizedText =
+              source.contentPolicy === "cli-memory"
+                ? sanitizeCliMemory(text)
+                : source.contentPolicy === "cli-config"
+                  ? sanitizeCliConfig(text)
+                  : redactFeedbackText(text, { diagnostic: true });
+            if (sanitizedText === null) {
+              skipLogFile(
+                source.contentPolicy === "cli-memory"
+                  ? "invalid-memory-diagnostic"
+                  : "invalid-config",
+              );
+              continue;
+            }
+            if (source.contentPolicy === "cli-memory") memoryFiles += 1;
+            const data = Buffer.from(sanitizedText);
             if (data.length > MAX_FILE_BYTES || totalBytes + data.length > budget) {
               skipLogFile("redacted-size-limit");
               continue;
@@ -170,7 +342,7 @@ export async function createFeedbackDiagnosticArchive(options: {
           `includedLogFiles: ${entries.length}`,
           `skippedLogFiles: ${Object.values(skippedLogFilesByReason).reduce((sum, count) => sum + count, 0)}`,
           `skippedLogFilesByReason: ${JSON.stringify(skippedLogFilesByReason)}`,
-          "Scope: diagnostic text log files modified today (local time); credentials and structured payloads redacted.",
+          "Scope: diagnostic text logs modified today, bounded CLI memory evidence and a non-sensitive CLI config projection; credentials and payloads redacted.",
         ].join("\n"),
       ),
       "about.txt",
