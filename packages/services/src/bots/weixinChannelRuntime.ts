@@ -11,6 +11,7 @@ import {
   BOT_RUNTIME_LOCK_RETRY_MS,
   createBotConnectionFingerprint,
   createLatestRuntimeRefreshQueue,
+  getBotPollingRetryDelayMs,
   type BotRuntimeLogger,
   type BotRuntimeStatusSink,
   waitFor,
@@ -29,6 +30,8 @@ interface WeixinChannelRuntimeDeps {
     provider: "weixin",
     payload: unknown,
   ): Promise<BotProviderCallbackResult>;
+  getUpdates?: typeof getWeixinUpdates;
+  acquirePollingLock?: typeof acquireWeixinPollingLock;
 }
 
 export function createWeixinChannelRuntime(deps: WeixinChannelRuntimeDeps) {
@@ -66,10 +69,11 @@ export function createWeixinChannelRuntime(deps: WeixinChannelRuntimeDeps) {
       return;
     }
 
+    let consecutiveFailures = 0;
     while (!signal.aborted) {
       let lock: Awaited<ReturnType<typeof acquireWeixinPollingLock>>;
       try {
-        lock = await acquireWeixinPollingLock(
+        lock = await (deps.acquirePollingLock ?? acquireWeixinPollingLock)(
           token,
           bot.id,
         );
@@ -106,7 +110,7 @@ export function createWeixinChannelRuntime(deps: WeixinChannelRuntimeDeps) {
         });
         while (!signal.aborted) {
           const buf = await deps.readWeixinGetUpdatesBuf(bot.id);
-          const result = await getWeixinUpdates({
+          const result = await (deps.getUpdates ?? getWeixinUpdates)({
             bot,
             deps: { loadCredential: (key) => deps.credentialService.load(key) },
             buf,
@@ -161,6 +165,7 @@ export function createWeixinChannelRuntime(deps: WeixinChannelRuntimeDeps) {
             // 之前先写游标再处理回复，进程在中途失败会跳过未完成消息，导致 AskUserQuestion 回复顺序错乱或丢失。
             await deps.writeWeixinGetUpdatesBuf(bot.id, result.buf);
           }
+          consecutiveFailures = 0;
           deps.statusSink.setRuntimeStatus({
             botId: bot.id,
             provider: "weixin",
@@ -174,13 +179,22 @@ export function createWeixinChannelRuntime(deps: WeixinChannelRuntimeDeps) {
         if (signal.aborted) {
           return;
         }
+        const message = error instanceof Error ? error.message : String(error);
+        consecutiveFailures += 1;
+        const retryDelayMs = getBotPollingRetryDelayMs(consecutiveFailures);
+        // Bugfix：游标提交失败原来只改运行状态、不写日志，并每 5 秒用旧游标无限重拉；
+        // 线上同一条消息被重投约 23 小时，日志里看不到原因。失败必须可见，并按退避降低重拉频率。
+        deps.logger.warn(
+          undefined,
+          `weixin polling failed bot=${bot.id} failures=${consecutiveFailures} retryInMs=${retryDelayMs}: ${message}`,
+        );
         deps.statusSink.setRuntimeStatus({
           botId: bot.id,
           provider: "weixin",
           status: "error",
-          message: `Weixin polling failed: ${error instanceof Error ? error.message : String(error)}`,
+          message: `Weixin polling failed: ${message}`,
         });
-        await waitFor(5_000, signal);
+        await waitFor(retryDelayMs, signal);
       } finally {
         // Bugfix：微信 buf 是第三方队列确认点；只有持锁 owner 能消费和写入，退出时必须释放给其他 host 接管。
         await lock.release().catch((error: unknown) => {
