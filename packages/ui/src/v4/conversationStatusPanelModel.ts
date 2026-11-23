@@ -4,11 +4,13 @@ import type {
   GoalState,
   PlanState,
   RunningSubagentSummary,
-  ToolCallRow,
   WorkflowRunState,
 } from "@zcode/shared/zcode-protocol-v4";
-import { workflowRunStepCounts } from "@zcode/shared/zcode-protocol-v4";
-import { extractPlanToolCallContent, getPlanDirectoryTitle } from "@/lib/planToolCall.js";
+import type { SessionWorkflowPhaseSummary } from "@zcode/shared/zcode-protocol-v4";
+import {
+  deriveSessionWorkflowPhases,
+  workflowRunStepCounts,
+} from "@zcode/shared/zcode-protocol-v4";
 
 export interface ConversationStatusPanelGitModel {
   branchName: string | null;
@@ -29,21 +31,8 @@ export interface ConversationStatusPanelPlanModel {
   totalCount: number;
 }
 
-export interface ConversationStatusPanelSessionPlanItem {
-  rowId: number;
-  toolCallId: string;
-  markdown: string;
-  title?: string;
-  planFilePath?: string;
-}
-
-export interface ConversationStatusPanelSessionPlansModel {
-  items: ConversationStatusPanelSessionPlanItem[];
-}
-
 export interface ConversationStatusPanelRunningSubagent extends RunningSubagentSummary {
-  controlWorkId?: string;
-  cancellable?: boolean;
+  stopControl?: { taskId: string; executionId: string };
 }
 
 /**
@@ -65,6 +54,12 @@ export interface ConversationStatusPanelWorkflowRun {
   nodesSettled?: number;
   nodesTotal?: number;
   /**
+   * 站点表（声明序）与当前站，与侧栏运行行同一条推导（shared 的 `deriveSessionWorkflowPhases`）。
+   * 与 `status` 同簇：有 run 支撑才有；降级行没有。空数组 = 脚本没声明阶段。
+   */
+  phases?: SessionWorkflowPhaseSummary[];
+  currentPhase?: string;
+  /**
    * 展示名。**`title ≡ workId` 即「未命名」**，渲染层据此换成 i18n 兜底名：core 的
    * `workflowTaskSubject` 兜底链最终落到 taskId（≡ runId ≡ workId），而投影把非空
    * description 原样抄进 title——所以「题名恰好等于 id」是唯一可靠的未命名信号。
@@ -81,8 +76,7 @@ export interface ConversationStatusPanelWorkflowRun {
  * 「打开哪个 run 的详情页」的意图。会话与 workspace 身份由宿主补齐，面板不感知 scope
  * （与工具卡走同一个 handler，不存在第二条打开路径）。
  *
- * 住在模型文件而不是组件里：composer 徽标的直达判定（`resolveSoleRunningWorkflowRunTarget`）
- * 与面板行产出同一形状，组件层从模型取类型，不反向依赖。
+ * 组件层从模型取得打开意图类型，不反向依赖。
  */
 export interface ConversationStatusPanelWorkflowRunTarget {
   runId: string;
@@ -93,7 +87,7 @@ export interface ConversationStatusPanelWorkflowRunTarget {
 /**
  * 面板行 → 打开意图。无 `toolCallId` 即 null（没有可开的详情页 tab）。名字只在真有时带上：
  * `title ≡ runId` 是未命名 run 的兜底样子（core 的 workflowTaskSubject 落到 taskId），把 runId
- * 冻进 tab 标签比通用兜底名更糟。面板行与 composer 徽标直达共用这一处换算。
+ * 冻进 tab 标签比通用兜底名更糟。面板行使用这一处换算。
  */
 export function workflowRunOpenTarget(
   run: ConversationStatusPanelWorkflowRun,
@@ -110,24 +104,21 @@ export interface ConversationStatusPanelModel {
   hasContent: boolean;
   git: ConversationStatusPanelGitModel | null;
   goal: GoalState | null;
-  sessionPlans: ConversationStatusPanelSessionPlansModel | null;
   plan: ConversationStatusPanelPlanModel | null;
   runningBashWorks: BackgroundWorkSummary[];
   runningSubagentWorks: ConversationStatusPanelRunningSubagent[];
   runningWorkflowRuns: ConversationStatusPanelWorkflowRun[];
 }
 
-interface BuildConversationStatusPanelModelInput {
+export interface BuildConversationStatusPanelModelInput {
   isOfficeMode?: boolean;
   gitSummary?: GitRepositorySummary | null;
   gitDirtyFileCount?: number;
   gitWorktreeChangeSummary?: { added: number; removed: number } | null;
   goal?: GoalState | null;
-  sessionPlans?: readonly ToolCallRow[];
-  workspacePath?: string;
   plan?: PlanState | null;
   backgroundWorks?: readonly BackgroundWorkSummary[];
-  runningSubagents?: readonly RunningSubagentSummary[];
+  runningSubagents?: readonly ConversationStatusPanelRunningSubagent[];
   workflowRuns?: readonly WorkflowRunState[];
 }
 
@@ -184,35 +175,6 @@ function buildPlanModel(plan: PlanState | null | undefined) {
   };
 }
 
-function buildSessionPlansModel(
-  rows: readonly ToolCallRow[] | undefined,
-  workspacePath: string | undefined,
-): ConversationStatusPanelSessionPlansModel | null {
-  if (!rows?.length) return null;
-  const items = rows
-    .filter(
-      (row) =>
-        row.toolName === "ExitPlanMode" &&
-        (row.status === "success" || row.status === "error" || row.status === "cancelled"),
-    )
-    .toSorted((left, right) => right.rowId - left.rowId)
-    .flatMap((row) => {
-      const content = extractPlanToolCallContent(row, workspacePath ?? "");
-      if (!content.markdown) return [];
-      const title = getPlanDirectoryTitle(content.markdown);
-      return [
-        {
-          rowId: row.rowId,
-          toolCallId: row.toolCallId,
-          markdown: content.markdown,
-          ...(title ? { title } : {}),
-          ...(content.planFilePath ? { planFilePath: content.planFilePath } : {}),
-        },
-      ];
-    });
-  return items.length > 0 ? { items } : null;
-}
-
 /**
  * Workflows 分区：活动 run 与 workflow 后台任务按 **workId ≡ runId** 联接。
  *
@@ -251,6 +213,8 @@ function buildRunningWorkflowRuns(
       status: run.status,
       nodesSettled: steps.settled,
       nodesTotal: steps.total,
+      phases: deriveSessionWorkflowPhases(run),
+      ...(run.currentPhase === undefined ? {} : { currentPhase: run.currentPhase }),
       ...(work ? { title: work.title, startedAt: work.startedAt } : {}),
       ...(work?.status === "running"
         ? {
@@ -275,36 +239,14 @@ function buildRunningWorkflowRuns(
   return rows;
 }
 
-/**
- * composer 徽标直达：本会话的运行态**恰好**
- * 是一条可开详情页的 workflow run 时，返回它的打开意图；否则 null，徽标退回展开胶囊。
- *
- * 判定条件逐项都有理由：终端 / 子代理为零——徽标是它们唯一的入口，直达会把它们藏掉；
- * workflow 恰一条——两条以上选哪条是用户的事；带 `toolCallId`——降级行（work 有、run 无）与
- * 旧 CLI 的 run 没有可开的详情页，与面板行「不可点」同义，退回胶囊让 Stop 仍可达。
- * 输入就是 `buildConversationStatusPanelModel` 的产出：徽标与胶囊共用同一份运行态真值。
- */
-export function resolveSoleRunningWorkflowRunTarget(
-  model: Pick<
-    ConversationStatusPanelModel,
-    "runningBashWorks" | "runningSubagentWorks" | "runningWorkflowRuns"
-  >,
-): ConversationStatusPanelWorkflowRunTarget | null {
-  if (model.runningBashWorks.length > 0 || model.runningSubagentWorks.length > 0) return null;
-  if (model.runningWorkflowRuns.length !== 1) return null;
-  return workflowRunOpenTarget(model.runningWorkflowRuns[0]!);
-}
-
 export function buildConversationStatusPanelModel(
   input: BuildConversationStatusPanelModelInput,
 ): ConversationStatusPanelModel {
   const git = input.isOfficeMode ? null : buildGitModel(input);
   const goal = input.goal ?? null;
-  const sessionPlans = buildSessionPlansModel(input.sessionPlans, input.workspacePath);
   const plan = buildPlanModel(input.plan);
   const runningBashWorks: BackgroundWorkSummary[] = [];
   const workflowWorkByWorkId = new Map<string, BackgroundWorkSummary>();
-  const subagentControlByChildSessionId = new Map<string, BackgroundWorkSummary | null>();
   for (const work of input.backgroundWorks ?? []) {
     if (work.kind === "workflow") {
       // "workflow"（workflow run）曾与 bash 同列在 Terminals 下，那是保住停止入口的已记录错标；
@@ -320,54 +262,17 @@ export function buildConversationStatusPanelModel(
     if (work.status !== "running") continue;
     if (work.kind === "bash") {
       runningBashWorks.push(work);
-    } else if (work.kind === "subagent" && work.childSessionId) {
-      // 目录投影接管 Agent 展示后，旧 backgroundWorks 的 workId/cancellable
-      // 没有再关联回来，导致 Stop 入口消失。只接受唯一 childSessionId 精确匹配；重复或
-      // 缺失身份时宁可不显示控制，也不能按标题、时间猜测并停止错误任务。
-      const existing = subagentControlByChildSessionId.get(work.childSessionId);
-      subagentControlByChildSessionId.set(
-        work.childSessionId,
-        existing === undefined ? work : null,
-      );
     }
   }
-  const runningSubagentWorks: ConversationStatusPanelRunningSubagent[] = (
-    input.runningSubagents ?? []
-  ).map((subagent) => {
-    const controlWork = subagentControlByChildSessionId.get(subagent.childSessionId);
-    if (!controlWork) return subagent;
-    return {
-      ...subagent,
-      controlWorkId: controlWork.workId,
-      cancellable: controlWork.cancellable !== false,
-    };
-  });
-  const projectedChildSessionIds = new Set(
-    runningSubagentWorks.map((subagent) => subagent.childSessionId),
-  );
-  for (const [childSessionId, controlWork] of subagentControlByChildSessionId) {
-    if (!controlWork || projectedChildSessionIds.has(childSessionId)) continue;
-    // backgroundWorks 已有精确 childSessionId 的 running 事实，但
-    // subagents cold/live 投影交接的短窗口可能暂时缺行；旧模型会把 Agent 控制
-    // 整条隐藏。这里只用唯一身份的权威 work 补齐同一控制，重复身份仍拒绝猜测。
-    runningSubagentWorks.push({
-      agentId: controlWork.workId,
-      childSessionId,
-      controlWorkId: controlWork.workId,
-      subagentType: "subagent",
-      title: controlWork.title,
-      status: controlWork.blocked ? "blocked" : "running",
-      startedAt: controlWork.startedAt,
-      cancellable: controlWork.cancellable !== false,
-    });
-  }
+  // 子智能体的 Stop 资格由 running 投影显式给出；旧 backgroundWorks 可能滞后或缺行，
+  // 用 childSessionId 联接会把另一条任务的控制柄误挂到目录行上。
+  const runningSubagentWorks = [...(input.runningSubagents ?? [])];
 
   const runningWorkflowRuns = buildRunningWorkflowRuns(input.workflowRuns, workflowWorkByWorkId);
 
   return {
     git,
     goal,
-    sessionPlans,
     plan,
     runningBashWorks,
     runningSubagentWorks,
@@ -375,7 +280,6 @@ export function buildConversationStatusPanelModel(
     hasContent: Boolean(
       git ||
       goal ||
-      sessionPlans ||
       plan ||
       runningBashWorks.length > 0 ||
       runningSubagentWorks.length > 0 ||
