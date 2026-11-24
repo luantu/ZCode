@@ -9,18 +9,27 @@ export interface ServerLayout {
   readonly runDir: string;
   readonly currentFile: string;
   readonly pendingFile: string;
+  readonly downgradeMarkerFile: string;
   readonly installFile: string;
   readonly componentsCacheDir: string;
   readonly stableBinDir: string;
   readonly statusFile: string;
+  readonly ingressTokenFile: string;
   readonly lockFile: string;
   readonly controlEndpoint: string;
   readonly serviceDir: string;
   readonly uninstalledFile: string;
   readonly updateTransactionFile: string;
+  readonly updateLockFile: string;
+  /** Supervisor 写出第一份状态前失败时的诊断摘要；不参与任何状态判断（R2 §7.1）。 */
+  readonly supervisorStartupFailureFile: string;
+  /** 与同机 Desktop 共用的凭据文件 `<dataBaseDir>/.zcode/v2/credentials.json`。 */
+  readonly sharedCredentialsFile: string;
+  /** Server 自有凭据文件；所在目录存在即表示已改用自有库（ZCT-2120452663971209216）。 */
+  readonly serverCredentialsFile: string;
 }
 
-function getDefaultServerDataRoot(): string {
+export function getDefaultServerDataRoot(): string {
   const configured = process.env.ZCODE_DATA_BASE_DIR?.trim();
   return join(configured || homedir(), ".zcode", "server");
 }
@@ -28,17 +37,20 @@ function getDefaultServerDataRoot(): string {
 export function resolveServerLayout(serverRoot = getDefaultServerDataRoot()): ServerLayout {
   const root = resolve(serverRoot);
   const runDir = join(root, "run");
+  const dataBaseDir = inferDataBaseDir(root);
   return {
-    dataBaseDir: inferDataBaseDir(root),
+    dataBaseDir,
     serverRoot: root,
     releasesDir: join(root, "releases"),
     runDir,
     currentFile: join(root, "current.json"),
     pendingFile: join(root, "pending.json"),
+    downgradeMarkerFile: join(root, "downgrade.json"),
     installFile: join(root, "install.json"),
     componentsCacheDir: join(root, "cache", "components"),
     stableBinDir: join(root, "bin"),
     statusFile: join(runDir, "status.json"),
+    ingressTokenFile: join(runDir, "ingress-token"),
     lockFile: join(runDir, "server.lock"),
     controlEndpoint:
       process.platform === "win32"
@@ -47,6 +59,10 @@ export function resolveServerLayout(serverRoot = getDefaultServerDataRoot()): Se
     serviceDir: join(root, "service"),
     uninstalledFile: join(root, "uninstalled.json"),
     updateTransactionFile: join(root, "update-transaction.json"),
+    updateLockFile: join(runDir, "update.lock"),
+    supervisorStartupFailureFile: join(runDir, "supervisor-startup-failure.json"),
+    sharedCredentialsFile: join(dataBaseDir, ".zcode", "v2", "credentials.json"),
+    serverCredentialsFile: join(root, "credentials", "credentials.json"),
   };
 }
 
@@ -104,7 +120,7 @@ export function isPathWithin(rootPath: string, candidatePath: string): boolean {
   return diff === "" || (!diff.startsWith("..") && !diff.split(sep).includes(".."));
 }
 
-interface UninstallTargetValidation {
+export interface UninstallTargetValidation {
   ok: boolean;
   reason?: "outside-server-root" | "home-directory" | "non-absolute";
   canonicalPath?: string;
@@ -128,10 +144,18 @@ export function validateUninstallTarget(
   return { ok: true, canonicalPath };
 }
 
-function assertServerDataRoot(serverRoot: string): string {
+export async function canonicalExistingPath(pathValue: string): Promise<string> {
+  return await realpath(pathValue);
+}
+
+export function assertServerDataRoot(serverRoot: string): string {
   const resolved = resolve(serverRoot);
   if (!isAbsolute(resolved) || resolved === dirname(resolved)) {
     throw new Error("Invalid server data root");
   }
   return resolved;
+}
+
+export function serverDataRootFromBase(baseDir: string): string {
+  return join(resolve(baseDir), ".zcode", "server");
 }

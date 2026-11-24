@@ -1,3 +1,8 @@
+import { ToolSearchModeSchema } from "@zcode/contracts";
+import {
+  STORAGE_MIGRATION_COMMAND,
+  storageMigrationReportSchema,
+} from "@zcode/shared/sqlite-migrations";
 import { extractDisallowedToolsArgs, parseGlobalArgs } from "./arguments.js";
 import { createNodeLoggerFactory } from "@zcode/adapters";
 import { getRuntimeInfo, type PresentationSurface } from "@zcode/core";
@@ -25,6 +30,12 @@ import { runPrompt } from "./prompt-command.js";
 import { runPluginsCommand, type PluginsCommandFlags } from "./plugins-command.js";
 import { runSkillsCommand } from "./skills-command.js";
 import { runTuiCommand } from "./tui-command.js";
+import { resolveBrowserStateSelection, validateBrowserStateFlags } from "./browser-state-option.js";
+import {
+  DEFAULT_CLI_WORKFLOW_MODE,
+  normalizeWorkflowModeOption,
+  WORKFLOW_MODE_SCOPE_ERROR,
+} from "./workflow-mode.js";
 import type {
   CliPermissionMode,
   CliResumeRequest,
@@ -41,6 +52,14 @@ const version = typeof __CLI_VERSION__ === "string" ? __CLI_VERSION__ : "0.0.0";
 const EMPTY_TARGET_ERROR = "--target requires non-empty text.";
 const DEFAULT_HEADLESS_PROMPT_MODE: CliPermissionMode = "yolo";
 const FORCE_MCS_SCOPE_ERROR = "--force-mcs can only be used with --prompt, --target, or tui.";
+const TOOLSEARCH_MODE_SCOPE_ERROR =
+  "--toolsearch-mode can only be used with --prompt, --target, or tui.";
+const TOTAL_TOKENS_REMINDER_SCOPE_ERROR =
+  "--total-tokens-reminder can only be used with --prompt, --target, or tui.";
+const TOTAL_TOKENS_REMINDER_VALUE_ERROR = "--total-tokens-reminder must be one of on, off.";
+const AGENT_ALWAYS_BACKGROUND_SCOPE_ERROR =
+  "--agent-always-background can only be used with --prompt, --target, or tui.";
+const AGENT_ALWAYS_BACKGROUND_VALUE_ERROR = "--agent-always-background must be one of on, off.";
 const TARGET_REPLACE_REQUIRES_TARGET_ERROR = "--target-replace requires --target.";
 const TARGET_CONFLICTS_WITH_PROMPT_ERROR =
   '--target cannot be used with --prompt. Use either --target <objective> or --prompt "/goal <objective>".';
@@ -51,8 +70,6 @@ const BROWSER_USE_SCOPE_ERROR =
 const SURFACE_SCOPE_ERROR =
   "--surface can only be used with --prompt, --target, app-server, or agent-server.";
 const MEMORY_BENCH_SCOPE_ERROR = "--memory-bench can only be used with -p/--prompt.";
-const ENABLE_WORKFLOW_SCOPE_ERROR =
-  "--enable-workflow can only be used with -p/--prompt or --target.";
 
 const pluginsCommandFlags = (
   values: ReturnType<typeof parseGlobalArgs>["values"],
@@ -101,7 +118,6 @@ const globalOptions = (
     browserExecutable,
     browserUse,
     detectedLocale,
-    ...(values["enable-workflow"] === true ? { enableWorkflow: true } : {}),
     force: values.force === true,
     json: values.json === true,
     locale,
@@ -136,8 +152,17 @@ const normalizeLocaleOption = (value: string | undefined): UiLocale | undefined 
 const normalizePromptMode = (value: string | undefined): CliPermissionMode | undefined => {
   if (value === undefined) return undefined;
   const mode = value.toLowerCase();
-  if (mode === "build" || mode === "plan" || mode === "edit" || mode === "yolo") return mode;
-  throw new Error(`Unsupported --mode value: ${value}. Supported modes: build, edit, plan, yolo.`);
+  if (
+    mode === "build" ||
+    mode === "plan" ||
+    mode === "edit" ||
+    mode === "yolo" ||
+    mode === "guarded"
+  )
+    return mode;
+  throw new Error(
+    `Unsupported --mode value: ${value}. Supported modes: build, edit, plan, yolo, guarded.`,
+  );
 };
 
 const normalizeBrowserUse = (value: string | undefined): GlobalOptions["browserUse"] => {
@@ -287,6 +312,37 @@ const runZCodeProtocolCommand = async (
 };
 
 export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<number> => {
+  if (ctx.argv[0] === STORAGE_MIGRATION_COMMAND) {
+    try {
+      if (ctx.argv.length !== 1) throw new Error("storage-migrate accepts no arguments");
+      const migrateStorage =
+        deps.migrateStorage ??
+        (async () => {
+          // 复用正常启动的配置解析与存储入口，不初始化 Provider/MCP/Agent 运行态。
+          const { createConfig, resolvePath } = await import("@zcode/adapters/config");
+          const { openStartupSqliteSessionStore } = await import("@zcode/adapters/storage");
+          const config = createConfig({ env: deps.env ?? process.env });
+          const store = await openStartupSqliteSessionStore({
+            dbPath: resolvePath(config.config.storage.sessionDbPath),
+          });
+          try {
+            return store.migrationResult;
+          } finally {
+            store.close();
+          }
+        });
+      const report = storageMigrationReportSchema.parse({
+        version: 1,
+        kind: "storage-migrated",
+        ...(await migrateStorage()),
+      });
+      ctx.stdout.write(`${JSON.stringify(report)}\n`);
+      return 0;
+    } catch (error) {
+      ctx.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      return 1;
+    }
+  }
   if (ctx.argv[0] === "__internal-search") {
     return runEmbeddedSearchCli(ctx.argv.slice(1), {
       cwd: (deps.cwd ?? process.cwd)(),
@@ -334,10 +390,14 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
   }
 
   let mode: CliPermissionMode | undefined;
+  let workflowModeOption: ReturnType<typeof normalizeWorkflowModeOption>;
   let browserUse: GlobalOptions["browserUse"];
   let presentationSurface: PresentationSurface;
   try {
     mode = normalizePromptMode(parsed.values.mode as string | undefined);
+    workflowModeOption = normalizeWorkflowModeOption(
+      parsed.values["workflow-mode"] as string | undefined,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     ctx.stderr.write(`${message}\n`);
@@ -361,6 +421,17 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
   const browserExecutable = parsed.values["browser-executable"] as string | undefined;
   if (browserExecutable !== undefined && browserUse !== "headless") {
     ctx.stderr.write(`${BROWSER_EXECUTABLE_REQUIRES_HEADLESS_ERROR}\n`);
+    return 1;
+  }
+  const browserStateExplicitPath = parsed.values["browser-state"] as string | undefined;
+  const browserStateDisabled = parsed.values["no-browser-state"] === true;
+  const browserStateFlagError = validateBrowserStateFlags({
+    browserUse,
+    explicitPath: browserStateExplicitPath,
+    disabled: browserStateDisabled,
+  });
+  if (browserStateFlagError) {
+    ctx.stderr.write(`${browserStateFlagError}\n`);
     return 1;
   }
 
@@ -391,6 +462,35 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     browserExecutable,
     outputFormat,
   );
+  const parsedToolsearchMode = ToolSearchModeSchema.safeParse(
+    parsed.values["toolsearch-mode"] ?? "off",
+  );
+  if (!parsedToolsearchMode.success) {
+    ctx.stderr.write("--toolsearch-mode must be one of auto, native, local, off.\n");
+    return 1;
+  }
+  const toolsearchMode = parsedToolsearchMode.data;
+  const totalTokensReminderOption = parsed.values["total-tokens-reminder"];
+  if (
+    totalTokensReminderOption !== undefined &&
+    totalTokensReminderOption !== "on" &&
+    totalTokensReminderOption !== "off"
+  ) {
+    ctx.stderr.write(`${TOTAL_TOKENS_REMINDER_VALUE_ERROR}\n`);
+    return 1;
+  }
+  const totalTokensReminder = totalTokensReminderOption === "on";
+  const agentAlwaysBackgroundOption = parsed.values["agent-always-background"];
+  if (
+    agentAlwaysBackgroundOption !== undefined &&
+    agentAlwaysBackgroundOption !== "on" &&
+    agentAlwaysBackgroundOption !== "off"
+  ) {
+    ctx.stderr.write(`${AGENT_ALWAYS_BACKGROUND_VALUE_ERROR}\n`);
+    return 1;
+  }
+  // 缺省开启：Agent 总在后台运行（07-subagent.md「ZCode 当前实现」）。
+  const agentAlwaysBackground = agentAlwaysBackgroundOption !== "off";
   const forceMcs = parsed.values["force-mcs"] === true;
   let targetRequest: CliTargetRequest | undefined;
   try {
@@ -429,15 +529,6 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
   }
 
   if (
-    options.enableWorkflow &&
-    (parsed.positionals.length > 0 ||
-      (typeof parsed.values.prompt !== "string" && targetRequest === undefined))
-  ) {
-    ctx.stderr.write(`${ENABLE_WORKFLOW_SCOPE_ERROR}\n`);
-    return 1;
-  }
-
-  if (
     options.memoryBench &&
     (typeof parsed.values.prompt !== "string" || parsed.positionals.length > 0)
   ) {
@@ -457,15 +548,39 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     return 1;
   }
 
+  // app-server 的 mode 归 Host 决定（launch.md「The standalone CLI: `--workflow-mode`」），
+  // 其余子命令不建会话；作用域与 --force-mcs 相同：只有 --prompt、--target 与 TUI。
   if (
-    forceMcs &&
+    workflowModeOption !== undefined &&
     !isForceMcsSupportedInvocation({
       positionals: parsed.positionals,
       prompt: parsed.values.prompt as string | undefined,
       targetRequest,
     })
   ) {
-    ctx.stderr.write(`${FORCE_MCS_SCOPE_ERROR}\n`);
+    ctx.stderr.write(`${WORKFLOW_MODE_SCOPE_ERROR}\n`);
+    return 1;
+  }
+  const workflowMode = workflowModeOption ?? DEFAULT_CLI_WORKFLOW_MODE;
+
+  // 只对本次启动生效的参数，作用域相同；报第一个用到的参数。
+  const launchOnlyScopeError = (
+    [
+      [parsed.values["toolsearch-mode"] !== undefined, TOOLSEARCH_MODE_SCOPE_ERROR],
+      [totalTokensReminderOption !== undefined, TOTAL_TOKENS_REMINDER_SCOPE_ERROR],
+      [agentAlwaysBackgroundOption !== undefined, AGENT_ALWAYS_BACKGROUND_SCOPE_ERROR],
+      [forceMcs, FORCE_MCS_SCOPE_ERROR],
+    ] as const
+  ).find(([used]) => used)?.[1];
+  if (
+    launchOnlyScopeError &&
+    !isForceMcsSupportedInvocation({
+      positionals: parsed.positionals,
+      prompt: parsed.values.prompt as string | undefined,
+      targetRequest,
+    })
+  ) {
+    ctx.stderr.write(`${launchOnlyScopeError}\n`);
     return 1;
   }
 
@@ -495,6 +610,28 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     },
   };
 
+  if (browserUse === "headless") {
+    const browserState = await resolveBrowserStateSelection({
+      explicitPath: browserStateExplicitPath,
+      disabled: browserStateDisabled,
+      launchCwd: (deps.cwd ?? process.cwd)(),
+      env,
+    });
+    if (!browserState.ok) {
+      ctx.stderr.write(`${browserState.error}\n`);
+      return 1;
+    }
+    for (const notice of browserState.notices) ctx.stderr.write(`${notice}\n`);
+    if (browserState.selection) {
+      options.browserState = browserState.selection;
+      commandDeps.logger?.info("Browser state file loaded", {
+        event: "cli.browser_state.loaded",
+        module: "cli",
+        ...browserState.logFields,
+      });
+    }
+  }
+
   if (typeof parsed.values.prompt === "string") {
     return await runPrompt(
       ctx,
@@ -507,7 +644,11 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       resumeRequest,
       toolDisallowlist,
       forceMcs,
+      toolsearchMode,
       presentationSurface,
+      workflowMode,
+      totalTokensReminder,
+      agentAlwaysBackground,
     );
   }
 
@@ -523,7 +664,11 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       resumeRequest,
       toolDisallowlist,
       forceMcs,
+      toolsearchMode,
       presentationSurface,
+      workflowMode,
+      totalTokensReminder,
+      agentAlwaysBackground,
     );
   }
 
@@ -578,6 +723,10 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
         resumeRequest,
         toolDisallowlist,
         forceMcs,
+        toolsearchMode,
+        workflowMode,
+        totalTokensReminder,
+        agentAlwaysBackground,
       );
     default:
       ctx.stderr.write(`Unknown command: ${commandName(parsed.positionals)}\n\n`);
