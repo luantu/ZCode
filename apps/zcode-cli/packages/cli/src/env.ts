@@ -5,6 +5,7 @@ import { config as loadDotenv } from "dotenv";
 import {
   ZCODE_RUNTIME_ENV_KEY,
   buildZCodeToolEnvPassthroughEnv,
+  mintStandaloneZCodeCuaBrokerCredentials,
   normalizeZCodeRuntimeEnv,
   sanitizeZCodeRuntimeEnv,
   sanitizeZCodeRuntimeEnvInPlace,
@@ -47,7 +48,20 @@ export function applyCliRuntimeEnvSanitization(
   applyCliRuntimeEnvDefaults(env, argv);
 }
 
-const findDotenv = (startDir: string): string | undefined => {
+const STANDALONE_CUA_PLATFORMS: ReadonlySet<NodeJS.Platform> = new Set(["darwin", "win32"]);
+
+/** 规则见 docs/design/v2/cua-standalone-in-process-broker.md「形态判定」。 */
+export function mintStandaloneCuaCredentialsIfEligible(input: {
+  isProtocol: boolean;
+  isPluginHost: boolean;
+  platform: NodeJS.Platform;
+}): boolean {
+  if (input.isProtocol || input.isPluginHost) return false;
+  if (!STANDALONE_CUA_PLATFORMS.has(input.platform)) return false;
+  return mintStandaloneZCodeCuaBrokerCredentials();
+}
+
+export const findDotenv = (startDir: string): string | undefined => {
   let current = resolve(startDir);
   const root = parse(current).root;
 
