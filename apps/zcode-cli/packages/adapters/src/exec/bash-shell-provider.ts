@@ -1,7 +1,12 @@
 import { accessSync, constants as fsConstants } from "node:fs";
-import { basename, delimiter, join, win32 } from "node:path";
-import { windowsExecutableCandidates } from "./windows-executable.js";
-import { type ExecutionShellDialect, type ExecutionShellSelection } from "@zcode/contracts";
+import { basename, delimiter, join } from "node:path";
+import { discoverWindowsGitBash, type WindowsGitBashDiscoveryOptions } from "@zcode/shared/node";
+import { resolveWindowsComSpec } from "./windows-executable.js";
+import {
+  type ExecutionShellDialect,
+  type ExecutionShellSelection,
+  WINDOWS_CMD_SHELL_DISPLAY_NAME,
+} from "@zcode/contracts";
 
 type PosixShellKind = "bash" | "zsh";
 type ExecutableCheck = (path: string) => boolean;
@@ -9,14 +14,11 @@ type EffectiveBashShellResolveOptions = {
   env: NodeJS.ProcessEnv;
   platform: NodeJS.Platform | string;
   exists?: ExecutableCheck;
+  gitBashDiscovery?: Omit<WindowsGitBashDiscoveryOptions, "env" | "platform" | "isExecutable">;
   override?: ExecutionShellSelection;
 };
 
 const FIXED_POSIX_SHELL_DIRS = ["/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"];
-const WINDOWS_GIT_BASH_PATHS = [
-  "C:\\Program Files\\Git\\bin\\bash.exe",
-  "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
-] as const;
 
 export interface BashShellProvider {
   dialect: ExecutionShellDialect;
@@ -25,14 +27,14 @@ export interface BashShellProvider {
   shell: boolean | string;
 }
 
-interface EffectiveBashShellResolution {
+export interface EffectiveBashShellResolution {
   selection: ExecutionShellSelection;
   provider?: BashShellProvider;
 }
 
-export function resolveEffectiveBashShellSelection(
+export async function resolveEffectiveBashShellSelection(
   options: EffectiveBashShellResolveOptions,
-): EffectiveBashShellResolution {
+): Promise<EffectiveBashShellResolution> {
   const snapshotResolution = resolveShellSnapshotSelection(options.override);
   if (snapshotResolution) {
     return snapshotResolution;
@@ -43,7 +45,7 @@ export function resolveEffectiveBashShellSelection(
     : resolveEffectivePosixBashShellSelection(options);
 }
 
-function resolvePosixBashShell(
+export function resolvePosixBashShell(
   env: NodeJS.ProcessEnv,
   exists?: ExecutableCheck,
 ): string | undefined {
@@ -71,21 +73,45 @@ function resolvePosixBashShell(
   return undefined;
 }
 
-function resolveWindowsGitBashShell(
+export async function resolveWindowsBashShellProvider(options: {
+  env: NodeJS.ProcessEnv;
+  exists?: ExecutableCheck;
+  gitBashDiscovery?: Omit<WindowsGitBashDiscoveryOptions, "env" | "platform" | "isExecutable">;
+  override?: ExecutionShellSelection;
+}): Promise<BashShellProvider | undefined> {
+  return (
+    await resolveEffectiveWindowsBashShellSelection({
+      env: options.env,
+      exists: options.exists,
+      gitBashDiscovery: options.gitBashDiscovery,
+      override: options.override,
+      platform: "win32",
+    })
+  ).provider;
+}
+
+export async function resolveWindowsGitBashShell(
   env: NodeJS.ProcessEnv,
   exists?: ExecutableCheck,
-): string | undefined {
-  for (const candidate of WINDOWS_GIT_BASH_PATHS) {
-    if (isExecutableCandidate(candidate, exists)) return candidate;
-  }
-
-  const gitExe = windowsExecutableCandidates("git", env).find((candidate) =>
-    isExecutableCandidate(candidate, exists),
-  );
-  if (!gitExe) return undefined;
-
-  const inferred = inferWindowsGitBashPathsFromGitExe(gitExe);
-  return inferred.find((candidate) => isExecutableCandidate(candidate, exists));
+  gitBashDiscovery?: Omit<WindowsGitBashDiscoveryOptions, "env" | "platform" | "isExecutable">,
+): Promise<string | undefined> {
+  // 原来的固定目录/PATH 发现会漏掉非标准安装；共享发现修复漏检，不改 shell 选择策略。
+  // exists 注入只描述隔离布局，不能混入本机注册表或配置；显式 discovery probe 仍可覆盖默认隔离。
+  const gitBash = await discoverWindowsGitBash({
+    ...(exists
+      ? {
+          readRegistryInstallRoots: async () => [],
+          readTextFile: async () => {
+            throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+          },
+        }
+      : {}),
+    ...gitBashDiscovery,
+    env,
+    isExecutable: exists,
+    platform: "win32",
+  });
+  return gitBash?.path;
 }
 
 function createGitBashProvider(shellPath: string): BashShellProvider {
@@ -140,9 +166,9 @@ function createShellProviderFromSelection(
   return undefined;
 }
 
-function resolveEffectiveWindowsBashShellSelection(
+async function resolveEffectiveWindowsBashShellSelection(
   options: EffectiveBashShellResolveOptions,
-): EffectiveBashShellResolution {
+): Promise<EffectiveBashShellResolution> {
   const override = options.override;
   if (override?.source === "user-config") {
     if (
@@ -169,7 +195,7 @@ function resolveEffectiveWindowsBashShellSelection(
           provider: createWindowsCmdProvider(cmdPath),
           selection: shellSelection({
             dialect: "cmd",
-            displayName: "CMD",
+            displayName: WINDOWS_CMD_SHELL_DISPLAY_NAME,
             id: override.id,
             label: override.label,
             path: cmdPath,
@@ -180,7 +206,11 @@ function resolveEffectiveWindowsBashShellSelection(
     }
   }
 
-  const gitBash = resolveWindowsGitBashShell(options.env, options.exists);
+  const gitBash = await resolveWindowsGitBashShell(
+    options.env,
+    options.exists,
+    options.gitBashDiscovery,
+  );
   if (gitBash) {
     return {
       provider: createGitBashProvider(gitBash),
@@ -195,7 +225,22 @@ function resolveEffectiveWindowsBashShellSelection(
     };
   }
 
-  return legacyShellSelection();
+  // 修复原因：这里原来返回 legacy-shell / "system shell"（无 path、无 provider），执行层再另读
+  // ComSpec。实际执行器是 cmd.exe，模型却看到 system shell 加工具名 Bash，按 bash 写命令，cmd 不认
+  // ls、cat、head 等（Windows 冻结重放 36–42% 的下一步出现这类命令）；Guarded 也因 legacy-shell
+  // 一律 unsupported 而不拦危险命令。现在在选择层就定下 ComSpec 上的 CMD，模型、权限、执行读同一份 selection。
+  const comSpec = resolveWindowsComSpec(options.env);
+  return {
+    provider: createWindowsCmdProvider(comSpec),
+    selection: shellSelection({
+      dialect: "cmd",
+      displayName: WINDOWS_CMD_SHELL_DISPLAY_NAME,
+      id: "auto:cmd",
+      label: WINDOWS_CMD_SHELL_DISPLAY_NAME,
+      path: comSpec,
+      source: "auto-detected",
+    }),
+  };
 }
 
 function resolveEffectivePosixBashShellSelection(
@@ -247,14 +292,6 @@ function legacyShellSelection(): EffectiveBashShellResolution {
   };
 }
 
-function inferWindowsGitBashPathsFromGitExe(gitExe: string): string[] {
-  const gitDir = win32.dirname(gitExe);
-  return [
-    win32.normalize(win32.join(gitDir, "..", "bin", "bash.exe")),
-    win32.normalize(win32.join(gitDir, "..", "..", "bin", "bash.exe")),
-  ];
-}
-
 function createWindowsCmdProvider(shellPath: string): BashShellProvider {
   return {
     dialect: "cmd",
@@ -277,7 +314,9 @@ function resolveWindowsCmdOverridePath(
 
 function isWindowsCmdFallback(shellPath: string): boolean {
   return (
-    !shellPath.includes("\\") && !shellPath.includes("/") && shellPath.toLowerCase() === "cmd.exe"
+    !shellPath.includes("\\") &&
+    !shellPath.includes("/") &&
+    shellPath.toLowerCase() === "cmd.exe"
   );
 }
 

@@ -1,19 +1,30 @@
+import { ZCODE_AGENT_PROVIDER } from "@zcode/shared";
+import { useSubagents } from "@/hooks/useSubagents.js";
+import { SUBAGENT_WORKFLOW_COLOR } from "@/lib/subagentColors.js";
+import {
+  WorkflowAgentFace,
+  SubagentCollectionIcon,
+} from "@/components/workflow-timeline/WorkflowAgentFace.js";
 /* oxlint-disable eslint(max-lines) -- 侧栏 Tab trigger 集中维护拖拽、上下文菜单与各类图标；本次只增加 Browser 驻留态测试属性，不为行数拆散既有交互。 */
 import { useRef, type CSSProperties } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  BotIcon,
+  FolderOpenIcon,
+  PuzzleIcon,
   BotMessageSquareIcon,
   BugIcon,
+  FileIcon,
   FileCode2Icon,
   FileDiffIcon,
   MapIcon,
   MessageSquareTextIcon,
-  ListTreeIcon,
+  PlugIcon,
   NotepadTextIcon,
   PackageIcon,
   PaletteIcon,
+  ScrollTextIcon,
+  ShieldCheckIcon,
   SquareTerminalIcon,
   TerminalIcon,
   WaypointsIcon,
@@ -34,6 +45,7 @@ import { Button } from "@/components/ui/button.js";
 import { BrowserUseTabIcon } from "@/app-shell/BrowserUseTabIcon.js";
 import { BrowserTabFavicon } from "@/app-shell/BrowserTabFavicon.js";
 import { SidePaneTabTitleTooltip } from "@/app-shell/SidePaneTabTitleTooltip.js";
+import { resolveExtensionIcon, resolveLocalizedText } from "@/extension-slots/index.js";
 
 // tab 默认按 156px 等宽排列；空间不足时以相同 grow/shrink 参数平均收缩到 60px，
 // 之后由外层滚动容器承接溢出，避免标题长度改变每个 tab 的宽度。
@@ -137,14 +149,14 @@ export function SortableSidePaneTabTrigger({
           onCloseTab(tab.id);
         }}
         className={cn(
-          "group relative inline-flex items-center gap-1",
+          "group relative inline-flex items-center gap-1 [corner-shape:superellipse(1.5)]",
           "flex-[1_1_9.75rem] !h-7 min-w-15 max-w-39 justify-start overflow-hidden rounded-md border px-1.5 pr-2 text-ui-base font-medium whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring",
           "!border-transparent !bg-transparent text-foreground-subtle !rounded-lg",
           "hover:text-foreground",
           !isActive && "hover:!bg-hover",
           // TabsTrigger asChild 经过 ContextMenuTrigger 再包一层后，Radix 的 active 标记不会稳定落到真实 tab div。
           // 这里用受控的 isActive 同步补齐 data-active / data-state，保证 Tailwind 的 active variant 能命中。
-          "data-active:!bg-selected data-active:text-foreground",
+          "data-active:!bg-selected data-active:text-foreground data-active:shadow-[0_1px_2px_-1px_rgb(0_0_0/0.08)]",
           "cursor-default",
           isDragging && "cursor-grabbing shadow-md",
         )}
@@ -210,7 +222,7 @@ export function SidePaneTabDragOverlay({
     <div
       className={cn(
         "inline-flex !h-7 w-39 min-w-15 max-w-39 items-center justify-start gap-1.5 whitespace-nowrap rounded-lg border border-transparent bg-selected px-1.5 pr-1 text-ui-base font-medium text-foreground shadow-md",
-        "cursor-grabbing",
+        "cursor-grabbing [corner-shape:superellipse(1.5)]",
       )}
     >
       <SidePaneTabItemContent tab={tab} title={title} diffBadgeLabel={diffBadgeLabel} />
@@ -264,20 +276,29 @@ function isDiffPreviewTab(tab: WorkspaceSidePaneTab): boolean {
 }
 
 export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
+  if (tab.type === "file-manager") return <FolderOpenIcon className="size-3.5" />;
   // plan-detail tab 由 switch-mode（ExitPlanMode）工具调用卡片打开，来源卡片
   // 用 NotepadTextIcon；tab 必须与来源一致，避免点击后图标跳变。不用 ListChecksIcon：
   // 那会与状态面板 Todo section 撞图标，语义上也偏向 todo 而非计划方案文档。
   if (tab.type === "plan-detail") {
     return <NotepadTextIcon className="size-3.5" />;
   }
+  if (tab.type === "plugin-ui") {
+    return <PlugIcon className="size-3.5" />;
+  }
+  if (tab.type === "extension-view") {
+    // 只渲染白名单里的图标，其余为通用插件图标（DESIGN.md「Extension slots」）。
+    const Icon = resolveExtensionIcon(tab.icon);
+    return <Icon className="size-3.5" />;
+  }
+  if (tab.type === "extension-logs") return <ScrollTextIcon className="size-3.5" />;
   // 同一条约定：来源卡片（CreateWorkflow）用 lucide Workflow，tab 必须与它一致。
   if (tab.type === "workflow-run") {
     return <WorkflowIcon className="size-3.5" />;
   }
-  // run 目录与单个 run 的详情必须能一眼分开（一页名单 vs 一次运行），所以借 subagent 目录
-  // 的同一枚「目录」图标——两个目录页在 tab 条上因此同形，正是它们的共同点。
+  // run 目录与单个 run 的详情使用不同图标，区分名单入口与一次运行。
   if (tab.type === "workflow-directory") {
-    return <ListTreeIcon className="size-3.5" />;
+    return <WorkflowIcon className="size-4" />;
   }
   // actor transcript 是「一个 actor 的对话记录」：既不是整次运行（Workflow），也不是子智能体
   // 会话（Bot）。三者在 tab 条上必须能一眼分开——它们的可见性与回收语义都不同。
@@ -297,15 +318,20 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
     return <MessageSquareTextIcon className="size-3.5" />;
   }
   if (tab.type === "subagent-session") {
-    return <BotIcon className="size-3.5" />;
+    return <SubagentTabAvatar tab={tab} />;
   }
 
   if (tab.type === "subagent-directory") {
-    return <ListTreeIcon className="size-3.5" />;
+    // 标签入口使用 16px，需覆盖共享头像默认的 20px 最小尺寸。
+    return <SubagentCollectionIcon className="size-4 min-h-4! min-w-4!" />;
   }
 
   if (tab.type === "browser") {
     return <BrowserTabFavicon faviconUrl={tab.faviconUrl} />;
+  }
+
+  if (tab.type === "browser-permissions") {
+    return <ShieldCheckIcon className="size-3.5" />;
   }
 
   if (tab.type === "git") {
@@ -323,6 +349,9 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
   if (tab.type === "model-trajectory") {
     return <WaypointsIcon className="size-3.5" />;
   }
+
+  if (tab.type === "new-tab") return <FileIcon className="size-3.5" />;
+  if (tab.type === "plugin-market") return <PuzzleIcon className="size-3.5" />;
 
   if (tab.type === "developer-tools") {
     return <BugIcon className="size-3.5" />;
@@ -451,7 +480,7 @@ function getPatchHeaderFileDisplayTarget(patch: string): string | null {
   return null;
 }
 
-function getPatchFileDisplayTarget(source: {
+export function getPatchFileDisplayTarget(source: {
   path?: string;
   title: string;
   patch: string;
@@ -473,6 +502,8 @@ function getPatchFileDisplayTarget(source: {
 export function getSidePaneTabTitle(
   tab: WorkspaceSidePaneTab,
   formatMessage: (descriptor: { id: string }, values?: Record<string, string>) => string,
+  /** 扩展视图的标题按语言映射，渲染时按当前界面语言取。 */
+  locale = "en-US",
 ): string {
   if (tab.type === "plan-detail") {
     return formatMessage({ id: "planTool.panel.planTab" });
@@ -516,6 +547,10 @@ export function getSidePaneTabTitle(
     return pageTitle || formatMessage({ id: "browser.title" });
   }
 
+  if (tab.type === "browser-permissions") {
+    return formatMessage({ id: "browser.permission.settings" });
+  }
+
   if (tab.type === "git") {
     return formatMessage({ id: "sidePane.review" });
   }
@@ -532,6 +567,9 @@ export function getSidePaneTabTitle(
     return tab.title?.trim() || formatMessage({ id: "modelTrajectory.title" });
   }
 
+  if (tab.type === "new-tab") return formatMessage({ id: "sidePane.newTab" });
+  if (tab.type === "plugin-market") return formatMessage({ id: "workspace.openPluginsSettings" });
+
   if (tab.type === "developer-tools") {
     return formatMessage({ id: "developerTools.title" });
   }
@@ -547,5 +585,42 @@ export function getSidePaneTabTitle(
     return tab.title?.trim() || formatMessage({ id: "browser.title" });
   }
 
+  if (tab.type === "plugin-ui") {
+    return tab.title.trim() || formatMessage({ id: "sidePane.pluginUi" });
+  }
+
+  if (tab.type === "extension-view") {
+    return (
+      resolveLocalizedText(tab.title, locale) || formatMessage({ id: "extensions.view.title" })
+    );
+  }
+
+  if (tab.type === "extension-logs") return formatMessage({ id: "extensions.logs.title" });
+
+  if (tab.type === "file-manager")
+    return tab.source?.title || formatMessage({ id: "fileManager.title" });
   return tab.source.title || formatMessage({ id: "codeViewer.title" });
+}
+
+function SubagentTabAvatar({
+  tab,
+}: {
+  tab: Extract<WorkspaceSidePaneTab, { type: "subagent-session" }>;
+}) {
+  const { agents } = useSubagents(tab.workspacePath, ZCODE_AGENT_PROVIDER, tab.workspaceIdentity);
+  const key = tab.subagentType.trim().toLowerCase();
+  const color = agents.find(
+    (agent) => agent.name.trim().toLowerCase() === key || agent.id.trim().toLowerCase() === key,
+  )?.color;
+  return (
+    <WorkflowAgentFace
+      avatarIndex={undefined}
+      name={tab.subagentType}
+      color={color ? SUBAGENT_WORKFLOW_COLOR[color] : undefined}
+      status={undefined}
+      idle
+      // 头像默认最小尺寸为 20px；紧凑标签必须同时覆盖，否则 size 不生效。
+      className="size-3.5 min-h-3.5! min-w-3.5!"
+    />
+  );
 }

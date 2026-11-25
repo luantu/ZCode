@@ -1,30 +1,30 @@
+import { getPluginSandboxHost } from "./pluginSandbox/index.js";
 /* eslint-disable max-lines -- 桌面命令分发需要共享窗口与平台上下文，集中维护更便于一致性 */
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { app, BrowserWindow, dialog, session, shell } from "electron";
-import type { MessageBoxOptions } from "electron";
+import { readZCodeStdioTapDevState, setZCodeStdioTapDevEnabled } from "@zcode/services/node";
 import {
+  buildZCodeEndpointUrls,
   DEFAULT_ZCODE_ENDPOINT_ORIGIN,
   DesktopCommandIds,
+  REWARDS_PARTITION,
+  TEST_ZCODE_ENDPOINT_ORIGIN,
+  getCommunityUrlFromConfigs,
+  getFeedbackUrlFromConfig,
+  normalizeZCodeEndpointOrigin,
   PlatformChannels,
+  resolveHelpAppConfig,
+  resolveZCodeEndpointOrigin,
+  ZCODE_ENV,
+  ZCODE_PRODUCT_FLAVOR,
   type AppSettings,
   type DesktopCommandId,
   type Locale,
-  resolveRuntimeZCodeEndpointOrigin,
-  ZCODE_ENV,
-  ZCODE_PRODUCT_FLAVOR,
-  buildZCodeEndpointUrls,
-  getCommunityUrlFromConfigs,
-  getFeedbackUrlFromConfig,
-  resolveHelpAppConfig,
-  normalizeZCodeEndpointOrigin,
-  resolveZCodeEndpointOrigin,
 } from "@zcode/shared";
-import { readZCodeStdioTapDevState, setZCodeStdioTapDevEnabled } from "@zcode/services/node";
+import type { MessageBoxOptions } from "electron";
+import { app, BrowserWindow, dialog, session, shell } from "electron";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { showAboutDialog } from "./about.js";
 import { checkForUpdateMenuClick } from "./autoUpdater.js";
-import { exportLogs } from "./exportLogs.js";
-import { openResourceManager } from "./resourceManagerWindow.js";
 import { resolveCuaOsSupport } from "./cuaOsSupport.js";
 import { syncWindowControlsOverlayForZoomLevel } from "./desktopWindowButtonPosition.js";
 import {
@@ -36,12 +36,111 @@ import {
   resolveDesktopZoomFactorForLevel,
   resolveDesktopZoomLevelFromFactor,
 } from "./desktopZoom.js";
+import { exportLogs } from "./exportLogs.js";
+import { openResourceManager } from "./resourceManagerWindow.js";
 
 export const HELP_TOGGLE_DEV_TOOLS_MENU_ID = "help.toggle-dev-tools";
 export const HELP_TOGGLE_ZCODE_STDIO_TAP_MENU_ID = "help.toggle-zcode-stdio-tap";
 const ZCODE_ENDPOINT_PROMPT_WIDTH = 460;
 const ZCODE_ENDPOINT_PROMPT_HEIGHT = 210;
 const CODING_PLAN_WEBVIEW_PARTITION = "persist:zcode-coding-plan";
+
+let crashRestartRequested = false;
+let crashRecoveryDialogOpen = false;
+
+const CRASH_RECOVERY_MESSAGES: Record<
+  Locale,
+  { message: string; detail: string; restart: string; later: string }
+> = {
+  "zh-CN": {
+    message: "应用界面已崩溃",
+    detail: "可以重启 ZCode 继续使用。所有应用窗口将关闭，未保存的内容可能丢失。",
+    restart: "重启应用",
+    later: "稍后",
+  },
+  "en-US": {
+    message: "The app window has crashed",
+    detail: "Restart ZCode to continue. All app windows will close. Unsaved changes may be lost.",
+    restart: "Restart app",
+    later: "Later",
+  },
+  "ja-JP": {
+    message: "アプリ画面がクラッシュしました",
+    detail:
+      "ZCode を再起動して続行できます。すべてのアプリウィンドウが閉じ、未保存の内容が失われる場合があります。",
+    restart: "アプリを再起動",
+    later: "後で",
+  },
+  "ru-RU": {
+    message: "Окно приложения аварийно завершило работу",
+    detail:
+      "Перезапустите ZCode, чтобы продолжить. Все окна приложения будут закрыты. Несохранённые изменения могут быть потеряны.",
+    restart: "Перезапустить приложение",
+    later: "Позже",
+  },
+  "ko-KR": {
+    message: "앱 화면이 비정상 종료되었습니다",
+    detail:
+      "ZCode를 다시 시작하여 계속할 수 있습니다. 모든 앱 창이 닫히며 저장하지 않은 내용이 손실될 수 있습니다.",
+    restart: "앱 다시 시작",
+    later: "나중에",
+  },
+};
+
+export function restartAppAfterCrash(logger: { info: (...args: unknown[]) => void }) {
+  if (crashRestartRequested) return;
+  crashRestartRequested = true;
+  try {
+    logger.info("[crash-recovery] restarting application");
+    // 崩溃后 renderer 或 Host 可能无法完成退出屏障；用户选择紧急重启时直接退出，
+    // 不再走普通 quit 的确认和清理等待，否则重启按钮仍可能卡住。
+    app.relaunch();
+    app.exit(0);
+  } catch (error) {
+    crashRestartRequested = false;
+    throw error;
+  }
+}
+
+export async function showRendererCrashDialog(options: {
+  window: BrowserWindow;
+  locale: Locale;
+  isQuitting: () => boolean;
+  logger: { info: (...args: unknown[]) => void; error: (...args: unknown[]) => void };
+}): Promise<void> {
+  const { window: win, logger } = options;
+  if (crashRecoveryDialogOpen || crashRestartRequested || win.isDestroyed() || options.isQuitting())
+    return;
+  crashRecoveryDialogOpen = true;
+  try {
+    const messages = CRASH_RECOVERY_MESSAGES[options.locale];
+    if (win.isMinimized()) win.restore();
+    win.show();
+    const result = await dialog.showMessageBox(win, {
+      type: "error",
+      title: "ZCode",
+      message: messages.message,
+      detail: messages.detail,
+      buttons: [messages.restart, messages.later],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    // 弹窗等待期间用户可能已关窗、刷新或退出；旧响应不能再重启一个已恢复的实例。
+    if (
+      result.response === 0 &&
+      !win.isDestroyed() &&
+      win.webContents.isCrashed() &&
+      !options.isQuitting()
+    ) {
+      restartAppAfterCrash(logger);
+    }
+  } catch (error) {
+    logger.error("[crash-recovery] recovery dialog failed:", error);
+  } finally {
+    crashRecoveryDialogOpen = false;
+  }
+}
 
 function resolveTargetWindow(senderWindow?: BrowserWindow | null) {
   if (senderWindow && !senderWindow.isDestroyed()) {
@@ -50,7 +149,7 @@ function resolveTargetWindow(senderWindow?: BrowserWindow | null) {
 
   return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
 }
-function updateDesktopZoomLevel(
+export function updateDesktopZoomLevel(
   targetWindow: BrowserWindow | null | undefined,
   action: "reset" | "in" | "out",
 ) {
@@ -80,6 +179,7 @@ function showMessageBoxWithOptionalParent(
 }
 async function clearAllDataAndRelaunch(options: {
   credentialsDir: string;
+  beforeClearAllData: () => Promise<void>;
   logger: {
     info: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
@@ -99,6 +199,9 @@ async function clearAllDataAndRelaunch(options: {
     return;
   }
 
+  // 旧入口直接 exit 会跳过预装进程收尾；先停掉写入方，再清除 v2，避免退出时晚写。
+  await options.beforeClearAllData();
+  await getPluginSandboxHost()?.clearBrowserData();
   const { rm } = await import("node:fs/promises");
   try {
     await rm(options.credentialsDir, { recursive: true, force: true });
@@ -139,6 +242,7 @@ export async function clearCodingPlanWebviewStorage(options: {
     // Coding Plan webview 使用独立持久 partition，默认窗口 session.clearStorageData()
     // 不会覆盖它；退出登录/清理数据时必须显式清除，避免旧账号 token 被下一次官网首屏读到。
     await session.fromPartition(CODING_PLAN_WEBVIEW_PARTITION).clearStorageData();
+    await session.fromPartition(REWARDS_PARTITION).clearStorageData();
     options.logger.info("[coding-plan-webview] cleared persistent partition storage");
   } catch (error) {
     options.logger.warn(
@@ -153,7 +257,7 @@ async function fetchRemoteAppConfig(fetchRemoteConfig?: () => Promise<unknown>):
   return fetchRemoteConfig();
 }
 
-function resolveLocalAppConfigPath(options?: {
+export function resolveLocalAppConfigPath(options?: {
   appPath?: string;
   isPackaged?: boolean;
   resourcesPath?: string;
@@ -322,8 +426,8 @@ function buildZCodeEndpointPromptHtml(currentValue: string): string {
   <body>
     <form id="form">
       <label for="endpoint">ZCode endpoint origin</label>
-      <input id="endpoint" value="${value}" placeholder="https://endpoint.example.com" spellcheck="false" />
-      <div class="hint">Use an http or https origin, for example https://endpoint.example.com.</div>
+      <input id="endpoint" value="${value}" placeholder="https://zcode.z.ai" spellcheck="false" />
+      <div class="hint">Use an http or https origin, for example https://zcode.z.ai.</div>
       <div class="actions">
         <button id="cancel" type="button">Cancel</button>
         <button type="submit">Save</button>
@@ -487,6 +591,7 @@ export async function executeDesktopCommand(options: {
   onDesktopZoomChanged?: (zoomLevel: number) => Promise<void> | void;
   onZCodeEndpointChanged: () => Promise<void> | void;
   onRelaunchApp: () => Promise<void>;
+  beforeClearAllData: () => Promise<void>;
   settingService: {
     get(): Promise<Pick<AppSettings, "zcodeEndpointOrigin" | "desktopZoomLevel">>;
     update(
@@ -496,6 +601,8 @@ export async function executeDesktopCommand(options: {
   zcodeEndpointEnvBaseOrigin?: string | null;
   credentialsDir: string;
   currentApplicationLocale: Locale;
+  /** 远控诊断：向已配对手机拉取日志并导出（窗口 id 为命令来源窗口）。 */
+  pullMobileLogs?: (windowId: number | undefined) => Promise<unknown>;
 }) {
   const targetWindow = resolveTargetWindow(options.senderWindow);
   options.logger.info(
@@ -599,6 +706,9 @@ export async function executeDesktopCommand(options: {
     case DesktopCommandIds.RelaunchApp:
       await options.onRelaunchApp();
       return;
+    case DesktopCommandIds.RestartAfterCrash:
+      restartAppAfterCrash(options.logger);
+      return;
     case DesktopCommandIds.OpenFeedback:
       await openFeedback(options.logger, targetWindow, options.fetchHelpConfig);
       return;
@@ -611,6 +721,9 @@ export async function executeDesktopCommand(options: {
       return;
     case DesktopCommandIds.ExportLogs:
       await exportLogs();
+      return;
+    case DesktopCommandIds.PullMobileLogs:
+      await options.pullMobileLogs?.(targetWindow?.id);
       return;
     case DesktopCommandIds.ToggleDevTools:
       targetWindow?.webContents.toggleDevTools();
@@ -634,7 +747,7 @@ export async function executeDesktopCommand(options: {
       return;
     case DesktopCommandIds.SetZCodeEndpointTest:
       await setZCodeEndpointOverride({
-        value: options.zcodeEndpointEnvBaseOrigin ?? resolveRuntimeZCodeEndpointOrigin(),
+        value: TEST_ZCODE_ENDPOINT_ORIGIN,
         settingService: options.settingService,
         onZCodeEndpointChanged: options.onZCodeEndpointChanged,
         logger: options.logger,
@@ -676,6 +789,7 @@ export async function executeDesktopCommand(options: {
       await clearCodingPlanWebviewStorage({ logger: options.logger });
       await clearAllDataAndRelaunch({
         credentialsDir: options.credentialsDir,
+        beforeClearAllData: options.beforeClearAllData,
         logger: options.logger,
       });
       return;
