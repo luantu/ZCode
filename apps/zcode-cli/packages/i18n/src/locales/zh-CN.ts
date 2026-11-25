@@ -29,23 +29,28 @@ export const zhCN: ZCodeCopy = {
   -h, --help       显示帮助
   -v, --version    显示版本
   -p, --prompt <text>  单次运行 prompt，不打开 TUI
-  --enable-workflow  为 --prompt 或 --target 开启动态工作流（默认关闭）
   --memory-bench   配合 --prompt 开启自动 Memory 提取并等待后退出（需已开启 Memory）
   --browser-use <mode> 启用 Browser Use backend（当前支持：headless）
   --surface <surface>  设置无头 prompt/app-server 的呈现面：terminal 或 desktop
   --browser-executable <path> headless Browser Use 使用的 Chrome/Chromium 路径
+  --browser-state <path> 注入 headless Browser Use 会话的 Playwright 登录态文件
+  --no-browser-state 不加载默认登录态文件（~/.zcode/cli/browser-state.json）
   --attach <path>  给 --prompt 附加本地文件；可重复传入
   --cwd <path>     从指定目录运行命令
   --disallowed-tools, --disallowedTools <tools...>
     从本次 prompt/TUI 的可用工具集中移除整个工具，不修改持久化配置。
     工具名用逗号或空格分隔，例如 "Bash Edit"。
     "Bash(git *)" 也会移除整个 Bash，不支持按命令内容匹配。
+  --toolsearch-mode <auto|native|local|off> ToolSearch 模式（默认 off，仅本次启动）
+  --total-tokens-reminder <on|off> --prompt、--target 与 TUI 的 token 预算提醒（默认 off，仅本次启动）
+  --agent-always-background <on|off> --prompt、--target 与 TUI 的子代理总在后台运行（默认 on，仅本次启动）
   --force-mcs      对 Anthropic provider 强制启用 mid-conversation system 投影
   --locale <locale>  UI 语言：en-US、zh-CN 或 auto
-  --mode <mode>    prompt 权限模式：build、edit、plan 或 yolo（--prompt 默认 yolo）
+  --mode <mode>    prompt 权限模式：build、edit、plan、yolo 或 guarded（--prompt 默认 yolo）
   --resume <sessionId>  按 sessionId 恢复持久化 session（sess_...）
   --target <text>  在 headless 模式运行或设置 session goal
   --target-replace 替换 --target 已存在的 goal
+  --workflow-mode <mode>  prompt/TUI 的动态工作流：disabled、onDemand 或 alwaysOn（默认 disabled）
   -c, --continue        恢复当前目录最近的 session
   --json           在支持的命令中输出机器可读 JSON
   --no-browser     不打开浏览器，只打印 OAuth URL
@@ -61,7 +66,7 @@ Slash Commands:
   /dwf [list|cancel|resume]  列出、取消或恢复 dynamic workflow run
   /fork [latest|checkpointId]  从 workspace checkpoint 派生新 session
   /mcp [list|status|connect|disconnect]  查看或管理 MCP servers
-  /mode [mode]          查看或切换权限模式：build、edit、plan 或 yolo
+  /mode [mode]          查看或切换权限模式：build、edit、plan、yolo 或 guarded
   /model [id]           查看或切换当前 session 模型
   /new                  在 TUI 中开始新 session
   /resume [sessionId]   按 sessionId 恢复 session；省略时恢复当前 cwd 最新 session
@@ -71,6 +76,9 @@ Slash Commands:
 `,
   },
   tui: {
+    approval: {
+      fromSession: (sessionId) => `来自后台会话 ${sessionId}`,
+    },
     copy: {
       copied: "已复制选中文本到剪贴板。",
       failed: "无法复制选中文本。",
