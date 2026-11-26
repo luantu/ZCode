@@ -1,14 +1,21 @@
 import { resolve } from "node:path";
-import { createConfig, resolvePath } from "@zcode/adapters/config";
+import { createConfigWithPluginMigrations, resolvePath } from "@zcode/adapters/config";
 import { createNodeSkillAdapter } from "@zcode/adapters/skills";
 import type { Logger, SkillContent, SkillDiagnostic, SkillLoadOutcome } from "@zcode/contracts";
 import { resolveBundledSkillRoots } from "./app/bundled-skills.js";
 import { getCliStorageRoot } from "./app/paths.js";
-import { resolveZCodePlugins } from "./plugins.js";
+import { filterVisualizeSkillRoots } from "./app/visualize-skill-gate.js";
+import { resolveZCodePlugins, type ResolveZCodePluginsOptions } from "./plugins.js";
 import { collectDisabledPaths } from "./skill-command-overrides.js";
 
 export interface ListZCodeSkillsOptions {
+  workspaceIdentity?: string;
+  remoteSessionId?: string;
+  pluginPreparation?: ResolveZCodePluginsOptions["pluginPreparation"];
+  pluginDiscovery?: ResolveZCodePluginsOptions["pluginDiscovery"];
   env?: NodeJS.ProcessEnv;
+  /** 协议宿主草稿目录使用；CLI 命令缺省关闭。 */
+  includeVisualize?: boolean;
   logger?: Logger;
   projectConfigPath?: string;
   skipUserConfig?: boolean;
@@ -84,7 +91,7 @@ async function createSkillDiscovery(options: ListZCodeSkillsOptions): Promise<
     }
 > {
   const workingDirectory = resolve(options.workingDirectory ?? process.cwd());
-  const configResult = createConfig({
+  const configResult = await createConfigWithPluginMigrations({
     env: options.env,
     projectConfigPath: options.projectConfigPath,
     workingDirectory,
@@ -98,7 +105,11 @@ async function createSkillDiscovery(options: ListZCodeSkillsOptions): Promise<
       workingDirectory,
     };
   }
-  const pluginOutcome = resolveZCodePlugins({
+  const pluginOutcome = await resolveZCodePlugins({
+    pluginPreparation: options.pluginPreparation,
+    pluginDiscovery: options.pluginDiscovery,
+    workspaceIdentity: options.workspaceIdentity,
+    remoteSessionId: options.remoteSessionId,
     configResult,
     env: options.env,
     logger: options.logger,
@@ -109,7 +120,7 @@ async function createSkillDiscovery(options: ListZCodeSkillsOptions): Promise<
   });
 
   // 内置技能包与插件技能根并列注入：`zcode skills list`、引用目录与 runtime 看到同一份发现结果。
-  const bundledSkillRoots = await resolveBundledSkillRoots({
+  const bundledSkillRoots = resolveBundledSkillRoots({
     cliStorageRoot: getCliStorageRoot(resolvePath(configResult.config.storage.dir)),
     logger: options.logger,
   });
@@ -118,7 +129,10 @@ async function createSkillDiscovery(options: ListZCodeSkillsOptions): Promise<
     enabled: true,
     skillPort: createNodeSkillAdapter({
       extraRoots: configResult.config.skills.roots,
-      extraResolvedRoots: [...pluginOutcome.skillRoots, ...bundledSkillRoots],
+      extraResolvedRoots: [
+        ...filterVisualizeSkillRoots(pluginOutcome.skillRoots, options.includeVisualize),
+        ...bundledSkillRoots,
+      ],
       disabledPaths: collectDisabledPaths(configResult.config.skillOverrides),
     }),
     workingDirectory,

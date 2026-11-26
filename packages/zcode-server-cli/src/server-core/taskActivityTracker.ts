@@ -1,14 +1,16 @@
+import type { SourceServerRunningTask } from "@zcode/shared";
 import { Emitter, type Event, type IDisposable } from "@zcode/rpc";
 import type {
   IZCodeAgentService,
   ZCodeAgentRuntimeLifecycleEvent,
   ZCodeAgentWorkspaceTarget,
 } from "@zcode/services";
-import type { ConversationTelemetryFact } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationTelemetryInput } from "@zcode/shared/zcode-protocol-v4";
 
-interface TaskActivityTracker extends IDisposable {
+export interface TaskActivityTracker extends IDisposable {
   readonly onDidChangeRunningTaskCount: Event<number>;
   readRunningTaskCount(): number;
+  readRunningTasks(): SourceServerRunningTask[];
 }
 
 type AgentActivitySource = Pick<
@@ -17,6 +19,7 @@ type AgentActivitySource = Pick<
 >;
 
 interface WorkspaceActivity {
+  target: ZCodeAgentWorkspaceTarget;
   activeSessionIds: Set<string>;
   runtimeIdentity: string;
   telemetry: IDisposable;
@@ -52,7 +55,7 @@ export function createTaskActivityTracker(
     publishCount();
   };
 
-  const acceptFact = (key: string, fact: ConversationTelemetryFact): void => {
+  const acceptFact = (key: string, fact: ConversationTelemetryInput): void => {
     const workspace = workspaces.get(key);
     if (!workspace) return;
     if (fact.kind === "turn.started") {
@@ -80,6 +83,10 @@ export function createTaskActivityTracker(
     if (!telemetry) return;
     workspaces.set(key, {
       activeSessionIds,
+      target: {
+        workspacePath: event.workspacePath,
+        ...(event.workspaceIdentity ? { workspaceIdentity: event.workspaceIdentity } : {}),
+      },
       runtimeIdentity: event.runtimeIdentity.identity,
       telemetry,
     });
@@ -89,6 +96,10 @@ export function createTaskActivityTracker(
   return {
     onDidChangeRunningTaskCount: changed.event,
     readRunningTaskCount: () => runningTaskCount,
+    readRunningTasks: () =>
+      [...workspaces.values()].flatMap((workspace) =>
+        [...workspace.activeSessionIds].map((sessionId) => ({ ...workspace.target, sessionId })),
+      ),
     dispose: () => {
       if (disposed) return;
       disposed = true;
