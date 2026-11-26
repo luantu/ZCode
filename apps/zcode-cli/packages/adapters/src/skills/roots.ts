@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { SkillRoot, SkillSource } from "@zcode/contracts";
 
 const GIT_MARKER = ".git";
@@ -12,6 +12,7 @@ const AGENTS_DIR = ".agents";
 
 export interface SkillRootResolutionOptions {
   homeDirectory?: string;
+  additionalDirectories?: readonly string[];
   extraRoots?: string[];
   extraResolvedRoots?: SkillRoot[];
   includeZcodeSkills?: boolean;
@@ -53,6 +54,18 @@ export async function resolveDefaultSkillRoots(
     }
   }
 
+  for (const directory of new Set(
+    (options.additionalDirectories ?? []).map((path) => resolve(path)),
+  )) {
+    if (directory === resolvedWorkingDirectory) continue;
+    roots.push(
+      ...skillRootsForBase(directory, "project", nextPriority).map((item) => ({
+        ...item,
+        namespace: basename(directory),
+      })),
+    );
+  }
+
   roots.push(...(options.extraResolvedRoots ?? []));
 
   return roots;
@@ -72,7 +85,8 @@ async function resolveProjectSkillDirectories(workingDirectory: string): Promise
   return directories;
 }
 
-async function findWorktreeRoot(workingDirectory: string): Promise<string | null> {
+/** 从工作目录向上找最近的 `.git`；项目 skill 根只扫到这一层。 */
+export async function findWorktreeRoot(workingDirectory: string): Promise<string | null> {
   let current = workingDirectory;
   while (true) {
     if (await pathExists(join(current, GIT_MARKER))) return current;
