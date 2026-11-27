@@ -1,6 +1,5 @@
 import type { ZCodeInteractionRequestOrigin } from "@zcode/shared";
 import { cn } from "@/components/lib/utils.js";
-import { Badge } from "@/components/ui/badge.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 export function InteractionRequestOriginBadge({
@@ -15,22 +14,35 @@ export function InteractionRequestOriginBadge({
     return null;
   }
 
-  const label = intl.formatMessage({ id: "chat.interactionOrigin.subagent" });
-  const title = origin.agentType
-    ? intl.formatMessage(
-        { id: "chat.interactionOrigin.subagent.title" },
-        { agentType: origin.agentType },
-      )
-    : label;
+  // description 点名是哪个子代理在问（动态工作流子代理为 `<名字> (<siteId>@<ordinal>)`，
+  // docs/dynamic-workflow/launch.md「Permissions inside a run」）；来源描述完整换行显示。
+  const description = origin.description?.trim();
+  const label = description
+    ? intl.formatMessage({ id: "chat.interactionOrigin.subagent.named" }, { description })
+    : intl.formatMessage({ id: "chat.interactionOrigin.subagent" });
+  const title = !origin.agentType
+    ? label
+    : description
+      ? intl.formatMessage(
+          { id: "chat.interactionOrigin.subagent.titleNamed" },
+          { agentType: origin.agentType, description },
+        )
+      : intl.formatMessage(
+          { id: "chat.interactionOrigin.subagent.title" },
+          { agentType: origin.agentType },
+        );
 
   return (
-    <Badge
-      variant="outline"
+    <span
       title={title}
       data-interaction-origin-badge="subagent"
-      className={cn("max-w-40 align-baseline text-ui-base truncate", className)}
+      className={cn(
+        "block w-full min-w-0 basis-full whitespace-normal [overflow-wrap:anywhere] text-ui-base font-normal text-foreground-subtle",
+        className,
+      )}
     >
+      {/* 完整换行避免长名称被裁切，连续的实例标识也不能撑出窄屏容器。 */}
       {label}
-    </Badge>
+    </span>
   );
 }

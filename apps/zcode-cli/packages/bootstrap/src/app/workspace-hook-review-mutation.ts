@@ -7,6 +7,7 @@ import { digestSummary, workspaceIdentitySummary } from "@zcode/core";
 import {
   buildWorkspaceHookBundleSnapshot,
   readWorkspaceHookProjectSources,
+  readWorkspaceHookScriptStates,
   type WorkspaceHookRuntimeRoot,
 } from "@zcode/shared/workspace-hook-discovery";
 import {
@@ -15,7 +16,7 @@ import {
 } from "@zcode/shared/workspace-hook-mutation";
 import type { WorkspaceHookReviewMutationPort } from "./workspace-hook-review-controller.js";
 
-interface WorkspaceHookReviewMutationPortOptions {
+export interface WorkspaceHookReviewMutationPortOptions {
   workingDirectory: string;
   workspaceIdentity: string;
   projectConfigPath?: string;
@@ -91,6 +92,11 @@ async function rebuildSnapshot(
     workspacePath: options.workingDirectory,
     sources: discovery.sources,
     runtimeRoot: options.runtimeRoot,
+    // 重建后的 snapshot 会替换 Runtime 当前 snapshot，必须与 Runtime 入口同样绑定脚本内容（D24）。
+    scriptStates: await readWorkspaceHookScriptStates({
+      workspacePath: options.workingDirectory,
+      sources: discovery.sources,
+    }),
   });
   if (!snapshot) {
     throw new WorkspaceHookMutationError(
