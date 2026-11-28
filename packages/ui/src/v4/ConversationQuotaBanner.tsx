@@ -1,7 +1,13 @@
 import { CodingPlanEntryButton } from "@/settings/CodingPlanEntryButton.js";
 import { useEffect, useRef } from "react";
+import type { CodingPlanBillingDiscountConfig } from "@zcode/shared";
 import { InfoIcon, RocketIcon, XIcon } from "lucide-react";
+import {
+  CodingPlanBillingDiscountBadgePill,
+  CodingPlanBillingDiscountInfoDialog,
+} from "@/CodingPlanBillingDiscount.js";
 import { Button } from "@/components/ui/button.js";
+import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type {
   SessionQuotaBannerKind,
@@ -46,12 +52,16 @@ function formatPercent(value: number | null): string {
 
 export function ConversationQuotaBanner({
   state,
+  billingDiscountActive,
+  billingDiscountConfig,
   upgradeActionLabelId = "chat.quota.action.upgrade",
   onUpgrade,
   onDismiss,
   onShown,
 }: {
   state: SessionQuotaBannerState;
+  billingDiscountActive?: boolean;
+  billingDiscountConfig?: CodingPlanBillingDiscountConfig;
   upgradeActionLabelId?: string;
   onUpgrade?: () => void;
   onDismiss: () => void;
@@ -98,28 +108,47 @@ export function ConversationQuotaBanner({
             percent: formatPercent(state.remainingPercent),
           },
         );
+  const showBillingDiscountBadge = Boolean(onUpgrade) && billingDiscountActive === true;
 
   return (
     <div
       ref={bannerRef}
-      className="mb-3 w-full px-4 max-md:px-2"
+      className="mb-3 w-full"
       data-testid="v4-session-quota-banner"
     >
-      <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+      <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border-[0.5px] border-border bg-surface backdrop-blur-md py-2 pl-3 pr-2">
         <div className="flex min-w-0 flex-1 items-center gap-2 text-ui-base text-foreground">
           <InfoIcon className="size-4 shrink-0" />
           <div className="min-w-0 break-words">{message}</div>
         </div>
         {onUpgrade ? (
-          <CodingPlanEntryButton
-            type="button"
-            size="sm"
-            className="h-auto shrink-0 gap-1.5 rounded-full"
-            onClick={onUpgrade}
-          >
-            <RocketIcon className="size-3.5" />
-            {intl.formatMessage({ id: upgradeActionLabelId })}
-          </CodingPlanEntryButton>
+          <div className="inline-flex shrink-0 items-center gap-1">
+            <CodingPlanEntryButton
+              type="button"
+              size="sm"
+              className={cn(
+                "h-auto gap-1.5 rounded-full",
+                // Bugfix：V4 迁移时只带回了白色活动徽标，漏掉同款升级按钮的活动背景，
+                // 导致默认黑底和徽标拼接突兀。这里与 Model Settings / Context 面板统一。
+                showBillingDiscountBadge &&
+                  "button-gradient pr-px text-white hover:bg-transparent hover:opacity-90 dark:bg-[#484A58] dark:hover:bg-[#484A58]",
+              )}
+              onClick={onUpgrade}
+            >
+              <RocketIcon className="size-3.5" />
+              {intl.formatMessage({ id: upgradeActionLabelId })}
+              {showBillingDiscountBadge ? (
+                <CodingPlanBillingDiscountBadgePill
+                  config={billingDiscountConfig}
+                  iconVisible={false}
+                  variant="surface"
+                />
+              ) : null}
+            </CodingPlanEntryButton>
+            {showBillingDiscountBadge ? (
+              <CodingPlanBillingDiscountInfoDialog config={billingDiscountConfig} />
+            ) : null}
+          </div>
         ) : null}
         {state.dismissible ? (
           <Button

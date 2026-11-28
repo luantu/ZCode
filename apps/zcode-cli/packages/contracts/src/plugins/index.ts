@@ -5,6 +5,7 @@ import type { SkillRoot } from "../skills/index.js";
 import type { ExecutionContext, TraceContext } from "../tracing/tracer.js";
 
 export const ZCODE_OFFICIAL_PLUGIN_MARKETPLACE = "zcode-plugins-official";
+export const CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE = "claude-plugins-official";
 export const ZCODE_INLINE_PLUGIN_MARKETPLACE = "inline";
 export const ZCODE_PLUGIN_HOST_COMMAND = "__zcode-plugin-host";
 /**
@@ -20,13 +21,14 @@ export const ZCODE_PLUGIN_HOST_COMMAND = "__zcode-plugin-host";
 export const ZCODE_DWF_CHILD_COMMAND = "__zcode-dwf-child";
 
 export function isOfficialMarketplaceId(id: string): boolean {
-  return id === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE;
+  return id === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE || id === CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE;
 }
 
 export type PluginSource = "official" | "inline" | "cache";
 export type PluginDiagnosticSeverity = "warning" | "error";
 
 export type PluginDiagnosticCode =
+  | "plugin_startup_timeout"
   | "plugin_root_not_found"
   | "plugin_manifest_not_found"
   | "plugin_manifest_invalid"
@@ -50,7 +52,10 @@ export type PluginDiagnosticCode =
   | "plugin_marketplace_source_unsupported"
   | "plugin_validation_deferred"
   | "plugin_variable_missing"
+  // 敏感选项私有文件读不出（损坏或 I/O 失败）：按空处理，诊断里只有文件路径，不含任何值。
+  | "plugin_secrets_unreadable"
   | "plugin_duplicate_id"
+  | "plugin_load_failed"
   | "plugin_not_found"
   | "plugin_ambiguous_name";
 
@@ -98,6 +103,8 @@ export type PluginComponentKind = "agent" | "command" | "skill" | "hook" | "mcp"
 
 export interface PluginComponentItem {
   name: string;
+  /** 发现的 agent 源文件路径；仅供 CLI 加载，不投影到组件详情协议。 */
+  path?: string;
   /** 来自组件 frontmatter / manifest 的描述；缺失时省略，绝不伪造。 */
   description?: string;
 }
@@ -120,6 +127,8 @@ export interface PluginStoreListing {
   /** icon 图片：https URL 或内置插件的本地资源路径。 */
   icon?: string;
   category?: string;
+  /** 官方市场内的维护归属；不参与执行权限和安装来源判定。 */
+  publisherType?: "official" | "community";
   author?: string;
   authorUrl?: string;
   homepage?: string;
@@ -136,7 +145,16 @@ export interface PluginStoreListing {
    * 因此不参与安装门禁与计费；命名不绑定具体套餐商品名，套餐改名不会让字段过期。
    */
   requiresPaidPlan?: boolean;
+  /**
+   * 目录条目声明的可见区域：`cn` 国内、`global` 海外。商店按当前登录区域只显示对应插件；
+   * 缺省表示所有区域可见。CLI 只保留这两个值并去重，过滤后为空时不写。
+   * 只影响商店展示，不限制安装与运行（docs/plugin-marketplace-ui-ux.md「按登录区域定向展示」）。
+   */
+  regions?: PluginStoreRegion[];
 }
+
+/** 商店定向展示的区域：`cn` 国内登录入口，`global` 海外登录入口。 */
+export type PluginStoreRegion = "cn" | "global";
 
 export interface PluginManifest {
   agents?: unknown;
@@ -156,8 +174,27 @@ export interface PluginManifest {
   repository?: string;
   settings?: unknown;
   skills?: unknown;
+  /** 插件 UI：`ui.surfaces[]` 面板入口声明，adapters 解析。 */
+  ui?: unknown;
   userConfig?: Record<string, PluginUserConfigOption>;
   version?: string;
+}
+
+/** 面板生命周期：第一版只接受会话级；`draft` 留待需要时放开。 */
+export type PluginUiSurfaceAvailability = "session";
+/** 标题：单一字符串或按 locale 键的映射（`{ "zh-CN": "...", "en-US": "..." }`）。 */
+export type PluginUiSurfaceTitle = string | Record<string, string>;
+export interface PluginUiSurfaceDefinition {
+  id: string;
+  title: PluginUiSurfaceTitle;
+  icon?: string;
+  /** 运行时 namespaced MCP server 名（`plugin:${name}:${server}`），UI 直接用它调 mcp/uiReadResource。 */
+  server: string;
+  /** 清单里声明的原始 server 键，仅供诊断与展示。 */
+  declaredServer: string;
+  /** 必须以 `ui://` 开头。 */
+  resourceUri: string;
+  availability: PluginUiSurfaceAvailability;
 }
 
 export interface PluginConfig {
@@ -196,8 +233,30 @@ export interface PluginMetadata {
   skillCount: number;
   skillRootCount: number;
   source: PluginSource;
+  /** 清单 `ui.surfaces[]` 解析结果（已校验）；未声明或全部非法时缺省。 */
+  uiSurfaces?: PluginUiSurfaceDefinition[];
   userConfig?: Record<string, PluginUserConfigOption>;
   version?: string;
+  /** 只有项目配置 `plugins.dirs` 声明的目录插件才有；见 docs/plugins/workspace-plugin-dir-trust.md。 */
+  workspaceTrust?: PluginWorkspaceTrust;
+}
+
+/**
+ * 项目目录插件的信任状态。pending 时插件强制停用、不解析任何组件；
+ * trusted 表示用户域记录命中当前声明摘要，启停回到配置。
+ */
+export interface PluginWorkspaceTrust {
+  state: "pending" | "trusted";
+  /** 插件根相对工作区目录的路径（`/` 分隔），是信任记录的定位键。 */
+  pluginRoot: string;
+  declarationDigest: string;
+}
+
+/** 项目目录插件的发现输入：候选目录来自项目配置，信任记录来自用户域存储。 */
+export interface WorkspacePluginDiscovery {
+  workspaceRoot: string;
+  roots: string[];
+  trusted: ReadonlyArray<{ pluginRoot: string; declarationDigest: string }>;
 }
 
 export interface PluginDiagnostic {
@@ -239,6 +298,8 @@ export interface PluginReferenceCatalogEntry {
    * 禁止进入 provider reminder 或协议投影——路径不属于 identifiers-only 契约。
    */
   rootPath: string;
+  /** 面板入口声明（A5）；供 host 在 session 冻结 catalog 里查面板定义。 */
+  uiSurfaces?: PluginUiSurfaceDefinition[];
 }
 
 export interface PluginReferenceCatalog {
@@ -257,6 +318,8 @@ export interface PluginLoadOutcome {
 }
 
 export interface PluginDiscoverRequest {
+  workspaceIdentity?: string;
+  remoteSessionId?: string;
   config: PluginConfig;
   env?: Record<string, string | undefined>;
   // bootstrap 可以把"安全到默认就开"的 official plugin id 列表传进来,
@@ -267,6 +330,8 @@ export interface PluginDiscoverRequest {
   storageRoot: string;
   trace?: TraceContext;
   workingDirectory: string;
+  /** 项目 `plugins.dirs` 候选；只有命中信任记录的目录才会启用。 */
+  workspacePlugins?: WorkspacePluginDiscovery;
 }
 
 export interface PluginOperationOptions {
@@ -275,6 +340,8 @@ export interface PluginOperationOptions {
 }
 
 export interface PluginPort {
+  /** 管理写入完成后清除可复用材料；无缓存实现可省略。 */
+  invalidate?(): void;
   discoverPlugins(
     request: PluginDiscoverRequest,
     options?: PluginOperationOptions,

@@ -6,7 +6,7 @@ import {
   OFFICIAL_NODE_REPL_HOST_PLUGIN_ID,
 } from "./official-plugin-definitions.js";
 
-const BUILT_IN_NODE_REPL_SERVER_NAME = "node_repl";
+export const BUILT_IN_NODE_REPL_SERVER_NAME = "node_repl";
 
 /**
  * node_repl 是官方能力共用的宿主工具，不是任何插件 manifest 声明的 plugin MCP。产物由独立的
@@ -47,6 +47,8 @@ export function resolveBuiltInNodeReplMcpServers(input: {
       ...nodeRepl,
       isolation: "workspace",
       protocolVersion: "2026-07-28",
+      // 内建来源：进程意外退出后由 adapter 自动重启（用户无法在设置页手动重连它）。
+      source: { kind: "builtin" },
     },
   };
 }
