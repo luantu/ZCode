@@ -80,7 +80,7 @@ export interface GitCommitResult {
 const GIT_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/@^~-]*$/;
 
 /** `git log` 的字段格式：NUL 分隔的 hash / subject / author name / author date(ISO-8601)。 */
-const GIT_LOG_PRETTY = "--pretty=format:%H%x00%s%x00%an%x00%aI";
+export const GIT_LOG_PRETTY = "--pretty=format:%H%x00%s%x00%an%x00%aI";
 
 /**
  * 工作区相对仓库根的前缀（`"sub/nested/"`，在仓库根为空串）。这是把线上的仓库根相对路径
@@ -105,7 +105,7 @@ export const GIT_STATUS_ARGV: readonly string[] = [
  * 未跟踪文件的固定 argv。`--exclude-standard` 让它尊重 .gitignore；`--full-name` 把它从
  * cwd 相对拉成仓库根相对，与 status / diff 对齐（本模块顶部的输出契约 2）。
  */
-const GIT_UNTRACKED_ARGV: readonly string[] = [
+export const GIT_UNTRACKED_ARGV: readonly string[] = [
   "ls-files",
   "--others",
   "--exclude-standard",
@@ -226,7 +226,16 @@ function looksAbsolute(value: string): boolean {
 export function gitChangedFilesPlan(base: string | undefined): GitCommandPlan[] {
   const ref = base === undefined ? "HEAD" : validateGitRef("git-changed-files", base);
   const tracked: GitCommandPlan = {
-    argv: ["diff", "--name-only", "-z", ref, "--", WORKSPACE_PATHSPEC],
+    argv: [
+      "diff",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--name-only",
+      "-z",
+      ref,
+      "--",
+      WORKSPACE_PATHSPEC,
+    ],
   };
   if (base !== undefined) return [tracked];
   return [tracked, { argv: [...GIT_UNTRACKED_ARGV] }];
@@ -244,10 +253,11 @@ export function gitChangedFilesPlan(base: string | undefined): GitCommandPlan[] 
  * `--relative` 本身也会排除 cwd 之外的改动，所以 `-- .` 在无 path 时是冗余的。**冗余是有意的**：
  * 范围收束不该悄悄依赖另一个 flag 的副作用，写出来才能被 argv 测试钉住。
  */
+// 只读 diff 不能执行配置中的外部命令；--no-ext-diff 不包含 textconv，需分别禁止。
 export function gitDiffArgv(base: string | undefined, path: string | undefined): string[] {
   const ref = base === undefined ? "HEAD" : validateGitRef("git-diff", base);
   const pathspec = path === undefined ? WORKSPACE_PATHSPEC : validateGitPath("git-diff", path);
-  return ["diff", "--relative", ref, "--", pathspec];
+  return ["diff", "--no-ext-diff", "--no-textconv", "--relative", ref, "--", pathspec];
 }
 
 /**
